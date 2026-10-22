@@ -5,6 +5,7 @@
   "schedule": ["before 6am on saturday"],
   "prConcurrentLimit": 5,
   "labels": ["renovate"],
+  "ignorePaths": ["cts/**", "host/**", "proxmox/**"],
   "enabledManagers": ["docker-compose", "custom.regex", "github-actions", "terraform"],
   "docker-compose": {
     "managerFilePatterns": ["/(^|/)docker-compose[^/]*\\.ya?ml(\\.j2)?$/"]
