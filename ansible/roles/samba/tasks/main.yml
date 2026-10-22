@@ -34,18 +34,22 @@
 
 - name: Does plexuser have a Samba account?
   ansible.builtin.command: pdbedit -L -u plexuser
-  register: smb_user
+  register: samba_smb_user
   changed_when: false
   failed_when: false
   check_mode: false
 
 - name: Create Samba account from Vault (only if missing)
   ansible.builtin.shell: |
+    set -o pipefail
     printf '%s\n%s\n' "$SMBPW" "$SMBPW" | smbpasswd -a -s plexuser
   environment:
     SMBPW: "{{ vault_samba_plexuser_password }}"
-  when: smb_user.rc != 0
+  when: samba_smb_user.rc != 0
   no_log: true
+  args:
+    executable: /bin/bash
+  changed_when: true   # only runs when needed (when:/handler)
 
 - name: Smbd running
   ansible.builtin.service:

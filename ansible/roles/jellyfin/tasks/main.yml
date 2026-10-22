@@ -15,9 +15,11 @@
 
 - name: Jellyfin repo signing key (dearmored)
   ansible.builtin.shell: >  # noqa: command-instead-of-module (pipes into gpg --dearmor)
+    set -o pipefail &&
     curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key
     | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg
   args:
+    executable: /bin/bash
     creates: /etc/apt/keyrings/jellyfin.gpg
 
 - name: Jellyfin apt repository

@@ -2,3 +2,4 @@
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ valheim_dir }}"
+  changed_when: true   # only runs when needed (when:/handler)

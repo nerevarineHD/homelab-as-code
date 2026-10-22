@@ -10,9 +10,11 @@
 
 - name: Plex repo signing key (dearmored)
   ansible.builtin.shell: >  # noqa: command-instead-of-module (pipes into gpg --dearmor)
+    set -o pipefail &&
     curl -fsSL https://downloads.plex.tv/plex-keys/PlexSign.key
     | gpg --dearmor -o /usr/share/keyrings/plex-archive-keyring.gpg
   args:
+    executable: /bin/bash
     creates: /usr/share/keyrings/plex-archive-keyring.gpg
 
 - name: Plex apt repository

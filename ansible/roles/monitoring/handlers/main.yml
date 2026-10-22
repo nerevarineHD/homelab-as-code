@@ -8,3 +8,4 @@
   ansible.builtin.command: docker compose up -d --force-recreate grafana
   args:
     chdir: /opt/monitoring
+  changed_when: true   # only runs when needed (when:/handler)

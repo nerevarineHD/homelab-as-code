@@ -4,3 +4,4 @@
     cmd: docker compose up -d --pull missing
     chdir: "{{ stardew_dir }}"
   when: stardew_steam_volume.stdout | default('') | length > 0
+  changed_when: true   # only runs when needed (when:/handler)

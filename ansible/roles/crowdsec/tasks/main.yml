@@ -1,7 +1,8 @@
 # CrowdSec engine on CT 107: reads Caddy's logs, bans attackers; Caddy enforces via its bouncer plugin.
 - name: CrowdSec apt repo (official installer, once)
-  ansible.builtin.shell: curl -s https://install.crowdsec.net | sh  # noqa: command-instead-of-module (vendor installer, runs once)
+  ansible.builtin.shell: set -o pipefail && curl -s https://install.crowdsec.net | sh  # noqa: command-instead-of-module (vendor installer, runs once)
   args:
+    executable: /bin/bash
     creates: /etc/apt/sources.list.d/crowdsec_crowdsec.list
 
 - name: CrowdSec engine
@@ -34,6 +35,7 @@
     argv: [cscli, bouncers, add, caddy-bouncer, -k, "{{ vault_crowdsec_caddy_bouncer_key }}"]
   when: "'caddy-bouncer' not in crowdsec_bouncers.stdout"
   no_log: true
+  changed_when: true   # only runs when needed (when:/handler)
 
 - name: CrowdSec running
   ansible.builtin.systemd_service:

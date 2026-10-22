@@ -97,8 +97,8 @@ flowchart LR
   host["host /etc, /root,<br/>tofu state"] -- "04:30 restic" --> gdrive
 ```
 
-The offsite job reports to an Uptime Kuma push monitor; Proxmox's own notifications (vzdump and
-the rest) go to Discord.
+The replication and offsite jobs each report to an Uptime Kuma push monitor; Proxmox's own
+notifications (vzdump and the rest) go to Discord.
 
 ## Disaster recovery
 

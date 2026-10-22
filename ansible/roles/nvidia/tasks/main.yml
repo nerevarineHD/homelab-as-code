@@ -39,10 +39,12 @@
 - name: Install driver on the host (DKMS, open kernel modules)
   ansible.builtin.command: "sh /root/{{ nvidia_run_file }} --silent --dkms --kernel-module-type=open"
   when: nvidia_needs_install and nvidia_kernel_module
+  changed_when: true   # only runs when needed (when:/handler)
 
 - name: Install driver libraries in the container (no kernel module)
   ansible.builtin.command: "sh /root/{{ nvidia_run_file }} --silent --no-kernel-module"
   when: nvidia_needs_install and not nvidia_kernel_module
+  changed_when: true   # only runs when needed (when:/handler)
 
 - name: Remove the installer from containers (404 MB)
   ansible.builtin.file:

@@ -51,8 +51,9 @@
     force: false
 
 - name: Install Pi-hole (unattended, only if missing)
-  ansible.builtin.shell: curl -sSL https://install.pi-hole.net | bash /dev/stdin --unattended  # noqa: command-instead-of-module
+  ansible.builtin.shell: set -o pipefail && curl -sSL https://install.pi-hole.net | bash /dev/stdin --unattended  # noqa: command-instead-of-module
   args:
+    executable: /bin/bash
     creates: /usr/local/bin/pihole
   register: pihole_install
 
@@ -61,6 +62,7 @@
     argv: [pihole, setpassword, "{{ vault_pihole_admin_password }}"]
   when: pihole_install.changed or (pihole_set_password | default(false) | bool)
   no_log: true
+  changed_when: true   # only runs when needed (when:/handler)
 
 - name: Pi-hole running
   ansible.builtin.systemd_service:
@@ -72,42 +74,45 @@
 # so FTL's built-in NTP client only produces "Insufficient permissions" warnings.
 - name: Read FTL clock-sync setting
   ansible.builtin.command: pihole-FTL --config ntp.sync.active
-  register: ftl_ntp_sync
+  register: pihole_ftl_ntp_sync
   changed_when: false
   check_mode: false
 
 - name: Disable FTL clock sync (host keeps time)
   ansible.builtin.command: pihole-FTL --config ntp.sync.active false
-  when: ftl_ntp_sync.stdout | trim == 'true'
+  when: pihole_ftl_ntp_sync.stdout | trim == 'true'
+  changed_when: true   # only runs when needed (when:/handler)
 
 # In an LXC, /proc/loadavg is the HOST's load (24 threads), but FTL compares it to this CT's
 # 1 core, so the "load > number of processors" warning is always a false positive here.
 - name: Read FTL load-check setting
   ansible.builtin.command: pihole-FTL --config misc.check.load
-  register: ftl_load_check
+  register: pihole_ftl_load_check
   changed_when: false
   check_mode: false
 
 - name: Disable FTL load check (meaningless inside an LXC)
   ansible.builtin.command: pihole-FTL --config misc.check.load false
-  when: ftl_load_check.stdout | trim == 'true'
+  when: pihole_ftl_load_check.stdout | trim == 'true'
+  changed_when: true   # only runs when needed (when:/handler)
 
 # Answer DNS for the IoT/DMZ VLANs too (LOCAL only answers directly-connected subnets).
 # Port 53 is not forwarded from the WAN; the ER707 ACLs decide which VLANs can reach it.
 - name: Read FTL listening mode
   ansible.builtin.command: pihole-FTL --config dns.listeningMode
-  register: ftl_listen
+  register: pihole_ftl_listen
   changed_when: false
   check_mode: false
 
 - name: Answer DNS from all subnets
   ansible.builtin.command: pihole-FTL --config dns.listeningMode ALL
-  when: ftl_listen.stdout | trim != 'ALL'
+  when: pihole_ftl_listen.stdout | trim != 'ALL'
+  changed_when: true   # only runs when needed (when:/handler)
 
 # Split-horizon DNS: at home, every *.example.net name resolves straight to Caddy on CT 107 (DMZ).
 - name: Read Pi-hole extra dnsmasq lines
   ansible.builtin.command: pihole-FTL --config misc.dnsmasq_lines
-  register: ftl_dnsmasq_lines
+  register: pihole_ftl_dnsmasq_lines
   changed_when: false
   check_mode: false
 
@@ -115,17 +120,19 @@
   ansible.builtin.command: >
     pihole-FTL --config misc.dnsmasq_lines '["address=/example.net/192.168.30.10","address=/valheim.example.net/192.168.30.11"]'
   notify: Restart pihole-FTL
-  when: "'address=/valheim.example.net/192.168.30.11' not in ftl_dnsmasq_lines.stdout"
+  when: "'address=/valheim.example.net/192.168.30.11' not in pihole_ftl_dnsmasq_lines.stdout"
+  changed_when: true   # only runs when needed (when:/handler)
 
 # Default 1000 queries/60s per client is too tight for chatty-but-legit devices
 # (the Nanit hits ~1000/min on STUN lookups while setting up live view) and a
 # rate-limited client gets NO answers at all. Only LAN/VLAN clients use this resolver.
 - name: Read FTL rate limit
   ansible.builtin.command: pihole-FTL --config dns.rateLimit.count
-  register: ftl_rate_limit
+  register: pihole_ftl_rate_limit
   changed_when: false
   check_mode: false
 
 - name: Rate limit 5000 queries per 60s per client
   ansible.builtin.command: pihole-FTL --config dns.rateLimit.count 5000
-  when: ftl_rate_limit.stdout | trim != '5000'
+  when: pihole_ftl_rate_limit.stdout | trim != '5000'
+  changed_when: true   # only runs when needed (when:/handler)
