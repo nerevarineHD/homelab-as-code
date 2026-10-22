@@ -1,0 +1,63 @@
+# NVIDIA driver, one .run file for host and containers so versions always match.
+- name: Host prerequisites (headers follow Proxmox kernel updates; DKMS rebuilds the module)
+  ansible.builtin.apt:
+    name: [proxmox-default-headers, build-essential, dkms, pkg-config]
+    state: present
+  when: nvidia_kernel_module
+
+- name: Host boot-time setup (nouveau off, modules, device files)
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: blacklist-nouveau.conf, dest: /etc/modprobe.d/blacklist-nouveau.conf }
+    - { src: nvidia-modules.conf, dest: /etc/modules-load.d/nvidia.conf }
+    - { src: 70-nvidia.rules, dest: /etc/udev/rules.d/70-nvidia.rules }
+    - { src: nvidia-persistenced.service, dest: /etc/systemd/system/nvidia-persistenced.service }
+  when: nvidia_kernel_module
+  notify: [Update initramfs, Reload systemd]
+
+- name: Installed driver version
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+  register: nvidia_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install needed?
+  ansible.builtin.set_fact:
+    nvidia_needs_install: "{{ (nvidia_installed.stdout | default('') | trim) != nvidia_driver_version }}"
+
+- name: Download the driver installer
+  ansible.builtin.get_url:
+    url: "{{ nvidia_run_url }}"
+    dest: "/root/{{ nvidia_run_file }}"
+    mode: "0755"
+  when: nvidia_needs_install
+
+- name: Install driver on the host (DKMS, open kernel modules)
+  ansible.builtin.command: "sh /root/{{ nvidia_run_file }} --silent --dkms --kernel-module-type=open"
+  when: nvidia_needs_install and nvidia_kernel_module
+
+- name: Install driver libraries in the container (no kernel module)
+  ansible.builtin.command: "sh /root/{{ nvidia_run_file }} --silent --no-kernel-module"
+  when: nvidia_needs_install and not nvidia_kernel_module
+
+- name: Remove the installer from containers (404 MB)
+  ansible.builtin.file:
+    path: "/root/{{ nvidia_run_file }}"
+    state: absent
+  when: not nvidia_kernel_module
+
+- name: Persistence daemon running
+  ansible.builtin.systemd_service:
+    name: nvidia-persistenced
+    enabled: true
+    state: started
+  when: nvidia_kernel_module and not ansible_check_mode
+
+- name: Reboot reminder after a host driver change
+  ansible.builtin.debug:
+    msg: "Host NVIDIA driver changed to {{ nvidia_driver_version }}: reboot the host, then run the GPU containers' plays."
+  when: nvidia_needs_install and nvidia_kernel_module

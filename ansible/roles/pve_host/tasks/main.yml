@@ -1,0 +1,249 @@
+# ---- apt sources + packages
+- name: Debian non-free source (unrar)
+  ansible.builtin.copy:
+    src: debian-nonfree.sources
+    dest: /etc/apt/sources.list.d/debian-nonfree.sources
+    mode: "0644"
+
+- name: Host packages
+  ansible.builtin.apt:
+    name: "{{ pve_host_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# ---- snapshots (sanoid)
+- name: Sanoid config
+  ansible.builtin.copy:
+    src: sanoid.conf
+    dest: /etc/sanoid/sanoid.conf
+    mode: "0644"
+
+# ---- nightly replication to the backup pool
+- name: Replication script
+  ansible.builtin.template:
+    src: backup-replicate.sh.j2
+    dest: /usr/local/sbin/backup-replicate.sh
+    mode: "0755"
+
+- name: Replication systemd units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - backup-replicate.service
+    - backup-replicate.timer
+  notify: Reload systemd
+
+- name: Replication timer enabled
+  ansible.builtin.systemd_service:
+    name: backup-replicate.timer
+    enabled: true
+    state: started
+
+# ---- vzdump target dataset (storage registration + job: OpenTofu, Phase 4)
+- name: Vzdump dataset
+  community.general.zfs:
+    name: backup/vzdump
+    state: present
+
+# ---- exporters
+- name: ZFS exporter binary (installed only if missing)
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp
+    v={{ pve_host_zfs_exporter_version }}
+    curl -fsSLO "https://github.com/pdf/zfs_exporter/releases/download/v$v/zfs_exporter-$v.linux-amd64.tar.gz"
+    tar xzf "zfs_exporter-$v.linux-amd64.tar.gz"
+    install -m 755 "zfs_exporter-$v.linux-amd64/zfs_exporter" /usr/local/bin/
+    rm -rf /tmp/zfs_exporter-"$v"*
+  args:
+    creates: /usr/local/bin/zfs_exporter
+
+- name: ZFS exporter unit
+  ansible.builtin.copy:
+    src: zfs_exporter.service
+    dest: /etc/systemd/system/zfs_exporter.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: ZFS exporter running
+  ansible.builtin.systemd_service:
+    name: zfs_exporter
+    enabled: true
+    state: started
+
+- name: Node-exporter defaults
+  ansible.builtin.copy:
+    src: prometheus-node-exporter
+    dest: /etc/default/prometheus-node-exporter
+    mode: "0644"
+  notify: Restart node-exporter
+
+# ---- hardware watchdog (takes effect on next reboot; no handler on purpose)
+- name: Watchdog-mux uses the SP5100 TCO hardware watchdog
+  ansible.builtin.copy:
+    src: pve-ha-manager
+    dest: /etc/default/pve-ha-manager
+    mode: "0644"
+
+# ---- offsite backup (restic -> Google Drive via rclone)
+- name: Rclone (official build; Debian's lags behind Google's API)
+  ansible.builtin.shell: curl -fsSL https://rclone.org/install.sh | bash  # noqa: command-instead-of-module (vendor installer)
+  args:
+    creates: /usr/bin/rclone
+
+- name: Rclone config directory
+  ansible.builtin.file:
+    path: /root/.config/rclone
+    state: directory
+
+# rclone rewrites this file when it refreshes its token: restore it only if missing.
+- name: Rclone config (bootstrap only)
+  ansible.builtin.copy:
+    src: rclone.conf.vault
+    dest: /root/.config/rclone/rclone.conf
+    mode: "0600"
+    force: false
+  diff: false
+
+- name: Restic password
+  ansible.builtin.copy:
+    src: restic-pass.vault
+    dest: /root/.restic-pass
+    mode: "0600"
+  diff: false
+
+- name: Restic environment
+  ansible.builtin.copy:
+    src: restic.env
+    dest: /root/.restic.env
+    mode: "0600"
+
+- name: Restic excludes
+  ansible.builtin.copy:
+    src: restic-excludes.txt
+    dest: /etc/restic-excludes.txt
+    mode: "0644"
+
+- name: Offsite backup script
+  ansible.builtin.template:
+    src: offsite-backup.sh.j2
+    dest: /usr/local/sbin/offsite-backup.sh
+    mode: "0755"
+
+- name: Offsite backup systemd units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - offsite-backup.service
+    - offsite-backup.timer
+  notify: Reload systemd
+
+- name: Offsite backup timer enabled
+  ansible.builtin.systemd_service:
+    name: offsite-backup.timer
+    enabled: true
+    state: started
+
+# ---- Proxmox cluster config (created only if missing; read-only checks run in --check too)
+- name: Is the backup-vzdump storage registered?
+  ansible.builtin.command: pvesm status --storage backup-vzdump
+  register: vzdump_storage
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Register backup-vzdump storage
+  ansible.builtin.command: >
+    pvesm add dir backup-vzdump --path /backup/vzdump --content backup
+    --is_mountpoint yes --prune-backups keep-daily=7,keep-weekly=4,keep-monthly=3
+  when: vzdump_storage.rc != 0
+
+- name: Existing backup jobs
+  ansible.builtin.command: pvesh get /cluster/backup --output-format json
+  register: backup_jobs
+  changed_when: false
+  check_mode: false
+
+- name: Nightly vzdump job (03:30, all CTs, snapshot mode)
+  ansible.builtin.command: >
+    pvesh create /cluster/backup --schedule 03:30 --storage backup-vzdump
+    --all 1 --mode snapshot --compress zstd --enabled 1
+  when: backup_jobs.stdout | from_json | selectattr('storage', 'equalto', 'backup-vzdump') | list | length == 0
+
+- name: Existing webhook targets
+  ansible.builtin.command: pvesh get /cluster/notifications/endpoints/webhook --output-format json
+  register: pve_webhooks
+  changed_when: false
+  check_mode: false
+
+- name: Discord webhook target (token from Vault)
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - create
+      - /cluster/notifications/endpoints/webhook
+      - --name
+      - discord
+      - --method
+      - post
+      - --url
+      - "https://discord.com/api/webhooks/{% raw %}{{ secrets.token }}{% endraw %}"
+      - --header
+      - "name=Content-Type,value={{ 'application/json' | b64encode }}"
+      - --body
+      - "{{ pve_host_discord_body_b64 }}"
+      - --secret
+      - "name=token,value={{ vault_proxmox_discord_token | b64encode }}"
+      - --comment
+      - Discord uptime-kuma-alerts
+  when: pve_webhooks.stdout | from_json | selectattr('name', 'equalto', 'discord') | list | length == 0
+  no_log: true
+
+- name: Existing notification matchers
+  ansible.builtin.command: pvesh get /cluster/notifications/matchers --output-format json
+  register: pve_matchers
+  changed_when: false
+  check_mode: false
+
+- name: Route warnings and errors to Discord
+  ansible.builtin.command:
+    argv: [pvesh, create, /cluster/notifications/matchers,
+           --name, "{{ pve_host_discord_matcher }}",
+           --match-severity, "warning,error",
+           --mode, all,
+           --target, discord]
+  when: pve_matchers.stdout | from_json | selectattr('name', 'equalto', pve_host_discord_matcher) | list | length == 0
+
+# ---- VLAN-aware bridge (lets CTs sit on tagged VLANs, e.g. DMZ 30; untagged CTs stay on VLAN 1)
+- name: Vmbr0 VLAN-aware
+  ansible.builtin.lineinfile:
+    path: /etc/network/interfaces
+    insertafter: '^\s*bridge-fd 0'
+    regexp: '^\s*bridge-vlan-aware'
+    line: '        bridge-vlan-aware yes'
+  notify: Reload network
+
+- name: Vmbr0 VLAN range
+  ansible.builtin.lineinfile:
+    path: /etc/network/interfaces
+    insertafter: '^\s*bridge-vlan-aware'
+    regexp: '^\s*bridge-vids'
+    line: '        bridge-vids 2-4094'
+  notify: Reload network
+
+# ---- gitleaks (secret scan before publishing the public repo; scripts/publish-public.sh)
+- name: Gitleaks binary
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp
+    v={{ pve_host_gitleaks_version }}
+    curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v$v/gitleaks_${v}_linux_x64.tar.gz" | tar -xz gitleaks
+    install -m 755 gitleaks /usr/local/bin/gitleaks
+    rm -f /tmp/gitleaks
+  args:
+    creates: /usr/local/bin/gitleaks

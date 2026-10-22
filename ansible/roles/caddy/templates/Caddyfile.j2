@@ -1,0 +1,42 @@
+# Managed by Ansible (roles/caddy).
+{
+	crowdsec {
+		api_url http://127.0.0.1:8080
+		api_key {env.CROWDSEC_API_KEY}
+	}
+	order crowdsec first
+}
+
+# One wildcard cert for *.{{ caddy_domain }} via the Cloudflare DNS challenge.
+*.{{ caddy_domain }}, {{ caddy_domain }} {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+		# Pi-hole answers *.{{ caddy_domain }} locally, so check challenge records via a public resolver
+		resolvers 1.1.1.1
+	}
+
+	# JSON access log for CrowdSec
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
+
+	# Banned IPs get a 403 before anything else runs
+	crowdsec
+
+	@test host test.{{ caddy_domain }}
+	handle @test {
+		respond "Caddy on CT 107 (DMZ) is serving {host}" 200
+	}
+
+{% for svc in caddy_services %}
+	@{{ svc.name }} host {{ svc.name }}.{{ caddy_domain }}
+	handle @{{ svc.name }} {
+		reverse_proxy {{ svc.upstream }}
+	}
+
+{% endfor %}	# Any other name: drop the connection
+	handle {
+		abort
+	}
+}

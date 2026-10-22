@@ -1,0 +1,54 @@
+# Share folders (/srv/*) are bind mounts from host datasets; their ownership/modes
+# belong to the CT definition (OpenTofu, Phase 4), not to this role.
+- name: Samba packages
+  ansible.builtin.apt:
+    name: [samba, smbclient]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Groups
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid }}"
+  loop:
+    - { name: storageusers, gid: 1000 }   # allowed on every share
+    - { name: plexuser, gid: 1001 }
+
+- name: Share user (no login shell)
+  ansible.builtin.user:
+    name: plexuser
+    uid: 1000
+    group: plexuser
+    groups: [storageusers]
+    append: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Smb.conf
+  ansible.builtin.copy:
+    src: smb.conf
+    dest: /etc/samba/smb.conf
+    mode: "0644"
+  notify: Reload smbd
+
+- name: Does plexuser have a Samba account?
+  ansible.builtin.command: pdbedit -L -u plexuser
+  register: smb_user
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Create Samba account from Vault (only if missing)
+  ansible.builtin.shell: |
+    printf '%s\n%s\n' "$SMBPW" "$SMBPW" | smbpasswd -a -s plexuser
+  environment:
+    SMBPW: "{{ vault_samba_plexuser_password }}"
+  when: smb_user.rc != 0
+  no_log: true
+
+- name: Smbd running
+  ansible.builtin.service:
+    name: smbd
+    state: started
+    enabled: true

@@ -1,0 +1,21 @@
+services:
+  seerr:
+    image: ghcr.io/seerr-team/seerr:v3.4.1
+    container_name: seerr
+    init: true
+    environment:
+      - TZ=America/Los_Angeles
+      - LOG_LEVEL=info
+    ports:
+      - 5055:5055
+    volumes:
+      - ./seerr/config:/app/config
+    restart: unless-stopped
+  doplarr:
+    image: ghcr.io/activexray/doplarr_rs:latest@sha256:3487e7193f14f8f7e290c69e9355a5ded548853ffa18b62178486ca33ce76820
+    container_name: doplarr
+    restart: unless-stopped
+    volumes:
+      - ./doplarr/config.toml:/config.toml:ro
+    depends_on:
+      - seerr

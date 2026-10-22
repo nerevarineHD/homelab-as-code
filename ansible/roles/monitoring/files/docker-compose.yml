@@ -1,0 +1,46 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/data:/prometheus
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    container_name: grafana
+    environment:
+      - GF_SERVER_ROOT_URL=http://192.168.0.15:3000   # links in Discord alerts
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana-provisioning/alerting:/etc/grafana/provisioning/alerting:ro
+      - ./dashboards:/var/lib/grafana-dashboards:ro
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+
+  pve-exporter:
+    image: prompve/prometheus-pve-exporter:3.10.1
+    container_name: pve-exporter
+    environment:
+      - PVE_USER=monitoring@pve
+      - PVE_TOKEN_NAME=monitoring
+      - PVE_TOKEN_VALUE=${PVE_TOKEN_VALUE}
+      - PVE_VERIFY_SSL=false
+    ports:
+      - 9221:9221
+    restart: unless-stopped
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2@sha256:9912da7d7d9b6ddc0c2d904beb84d24689c1ed9c33b81419eb9008663a92a329
+    container_name: uptime-kuma
+    volumes:
+      - ./uptime-kuma:/app/data
+    ports:
+      - 3001:3001
+    restart: unless-stopped

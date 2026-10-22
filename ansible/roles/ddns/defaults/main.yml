@@ -1,0 +1,3 @@
+ddns_dir: /opt/ddns
+# Records this updater OWNS (creates + keeps pointed at the home IP). Do not also define them in OpenTofu.
+ddns_domains: "valheim.example.net,jellyfin.example.net,request.example.net"

@@ -1,0 +1,27 @@
+# Managed by Ansible (roles/valheim). Valheim dedicated server, Steam-only, unlisted.
+services:
+  valheim:
+    image: {{ valheim_image }}
+    container_name: valheim
+    restart: unless-stopped
+    stop_grace_period: 2m          # lets the server save the world on shutdown
+    cap_add:
+      - sys_nice
+    ports:
+      - "2456-2457:2456-2457/udp"  # game + Steam query
+      - "9001:9001/tcp"            # process manager, LAN -> DMZ only (not forwarded)
+    env_file: .env                 # SERVER_PASS (from Vault)
+    environment:
+      SERVER_NAME: "{{ valheim_server_name }}"
+      WORLD_NAME: "{{ valheim_world_name }}"
+      SERVER_PUBLIC: "false"       # unlisted: join by address + password only
+      SERVER_ARGS: "{{ valheim_server_args }}"
+      SUPERVISOR_HTTP: "true"      # process manager API on :9001, for Uptime Kuma
+      SUPERVISOR_HTTP_USER: kuma
+      TZ: America/Los_Angeles
+      BACKUPS: "true"              # hourly world backups into /config/backups
+      BACKUPS_MAX_AGE: "7"         # days kept
+      UPDATE_IF_IDLE: "true"       # only auto-update when nobody is playing
+    volumes:
+      - ./config:/config           # worlds + backups
+      - ./data:/opt/valheim        # server install (re-downloadable)

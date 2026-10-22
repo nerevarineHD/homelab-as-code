@@ -1,0 +1,29 @@
+- name: DDNS directory
+  ansible.builtin.file:
+    path: "{{ ddns_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ddns_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: ddns_compose
+
+- name: Cloudflare token (0600)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ ddns_dir }}/.env"
+    mode: "0600"
+  no_log: true
+  diff: false
+  register: ddns_env
+
+- name: Updater running (recreated on config change)
+  ansible.builtin.command: >
+    docker compose up -d {{ '--force-recreate' if (ddns_compose.changed or ddns_env.changed) else '' }}
+  args:
+    chdir: "{{ ddns_dir }}"
+  register: ddns_up
+  changed_when: "'Started' in ddns_up.stderr or 'Created' in ddns_up.stderr or 'Recreated' in ddns_up.stderr"

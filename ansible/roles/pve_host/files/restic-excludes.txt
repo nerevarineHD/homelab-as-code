@@ -1,0 +1,8 @@
+**/var/cache
+**/var/tmp
+**/tmp
+**/var/lib/docker/overlay2
+**/var/lib/docker/image
+**/var/lib/docker/buildkit
+**/Plex Media Server/Cache
+/root/.cache

@@ -1,0 +1,8 @@
+valheim_dir: /opt/valheim
+valheim_server_name: "Vigrid"        # shown in Steam; the password must not contain it
+valheim_world_name: "Midgard"     # save name; changing it later starts a NEW world
+# upstream only publishes :latest, so the digest is the pin (Renovate updates it)
+# renovate: datasource=docker depName=lloesche/valheim-server
+valheim_image: "lloesche/valheim-server:latest@sha256:19f55bcf7bb67eedf2ab68c77899593e4c21e869b810686cedc9745a05e2eb01"
+# World modifiers (vanilla, no client mods): ore/metal through portals, more resources
+valheim_server_args: "-modifier portals casual -modifier resources more"

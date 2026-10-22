@@ -1,0 +1,37 @@
+# Docker CE from Docker's official apt repo (same layout as get.docker.com).
+- name: Keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Docker repo signing key present?
+  ansible.builtin.stat:
+    path: /etc/apt/keyrings/docker.asc
+  register: docker_key
+
+- name: Docker repo signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+  when: not docker_key.stat.exists
+
+- name: Docker apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: "deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable\n"  # noqa: yaml[line-length]
+    mode: "0644"
+
+- name: Docker packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Docker service enabled and running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true

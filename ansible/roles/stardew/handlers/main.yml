@@ -1,0 +1,6 @@
+---
+- name: Restart stardew
+  ansible.builtin.command:
+    cmd: docker compose up -d --pull missing
+    chdir: "{{ stardew_dir }}"
+  when: stardew_steam_volume.stdout | default('') | length > 0

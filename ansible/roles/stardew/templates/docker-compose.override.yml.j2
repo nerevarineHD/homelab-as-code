@@ -1,0 +1,13 @@
+# Managed by Ansible (role: stardew). Edit the role, not this file.
+#
+# Upstream adds CAP_SYS_TIME for GOG auth. Proxmox LXCs drop sys_time from
+# the bounding set, so the container would fail to start. Steam doesn't need it.
+services:
+  server:
+    cap_add: !reset []
+{% if not stardew_discord_enabled %}
+
+  # No token, so keep the Discord bot from crash-looping.
+  discord-bot:
+    profiles: ["discord"]
+{% endif %}

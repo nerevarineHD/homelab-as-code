@@ -1,0 +1,56 @@
+# CrowdSec engine on CT 107: reads Caddy's logs, bans attackers; Caddy enforces via its bouncer plugin.
+- name: CrowdSec apt repo (official installer, once)
+  ansible.builtin.shell: curl -s https://install.crowdsec.net | sh  # noqa: command-instead-of-module (vendor installer, runs once)
+  args:
+    creates: /etc/apt/sources.list.d/crowdsec_crowdsec.list
+
+- name: CrowdSec engine
+  ansible.builtin.apt:
+    name: crowdsec
+    state: present
+    update_cache: true
+
+- name: Caddy collection (parser + HTTP attack scenarios + CVE probes)
+  ansible.builtin.command: cscli collections install crowdsecurity/caddy
+  args:
+    creates: /etc/crowdsec/collections/caddy.yaml
+  notify: Restart crowdsec
+
+- name: Read Caddy's access log
+  ansible.builtin.copy:
+    src: acquis-caddy.yaml
+    dest: /etc/crowdsec/acquis.d/caddy.yaml
+    mode: "0644"
+  notify: Restart crowdsec
+
+- name: Registered bouncers
+  ansible.builtin.command: cscli bouncers list -o raw
+  register: crowdsec_bouncers
+  changed_when: false
+  check_mode: false
+
+- name: Register Caddy's bouncer with the key from Vault
+  ansible.builtin.command:
+    argv: [cscli, bouncers, add, caddy-bouncer, -k, "{{ vault_crowdsec_caddy_bouncer_key }}"]
+  when: "'caddy-bouncer' not in crowdsec_bouncers.stdout"
+  no_log: true
+
+- name: CrowdSec running
+  ansible.builtin.systemd_service:
+    name: crowdsec
+    enabled: true
+    state: started
+
+# Prometheus metrics on CT 107's own address (scraped from the LAN by Prometheus on CT 104;
+# LAN -> DMZ is allowed, and 6060 is not forwarded from the internet).
+- name: CrowdSec metrics listen on the DMZ address
+  ansible.builtin.copy:
+    dest: /etc/crowdsec/config.yaml.local
+    mode: "0644"
+    content: |
+      prometheus:
+        enabled: true
+        level: full
+        listen_addr: {{ ansible_host }}
+        listen_port: 6060
+  notify: Restart crowdsec

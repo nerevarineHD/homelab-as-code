@@ -1,0 +1,35 @@
+# Plex metadata/watch history live in /var/lib/plexmediaserver: restored from vzdump.
+# The media bind mount (/mnt/media, read-only) comes from the CT definition (OpenTofu, Phase 4).
+
+# Debian 13's sqv rejects Plex's SHA-1-signed repo key; scoped override.
+- name: APT sequoia policy override for Plex's SHA-1 key
+  ansible.builtin.copy:
+    src: apt-sequoia.config
+    dest: /etc/crypto-policies/back-ends/apt-sequoia.config
+    mode: "0644"
+
+- name: Plex repo signing key (dearmored)
+  ansible.builtin.shell: >  # noqa: command-instead-of-module (pipes into gpg --dearmor)
+    curl -fsSL https://downloads.plex.tv/plex-keys/PlexSign.key
+    | gpg --dearmor -o /usr/share/keyrings/plex-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/plex-archive-keyring.gpg
+
+- name: Plex apt repository
+  ansible.builtin.copy:
+    src: plexmediaserver.list
+    dest: /etc/apt/sources.list.d/plexmediaserver.list
+    mode: "0644"
+
+- name: Plex Media Server installed
+  ansible.builtin.apt:
+    name: plexmediaserver
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Plex running
+  ansible.builtin.service:
+    name: plexmediaserver
+    state: started
+    enabled: true

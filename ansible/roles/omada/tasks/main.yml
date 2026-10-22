@@ -1,0 +1,24 @@
+# Config is managed here; controller data (sites, APs, SSIDs) comes from vzdump restores
+# or Omada's own backup export.
+- name: Stack directories (data/logs owned by Omada's UID 508)
+  ansible.builtin.file:
+    path: "/opt/omada/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: "", owner: "0" }
+    - { path: "data", owner: "508" }
+    - { path: "logs", owner: "508" }
+
+- name: Compose file
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: /opt/omada/docker-compose.yml
+    mode: "0644"
+
+- name: Controller up
+  community.docker.docker_compose_v2:
+    project_src: /opt/omada
+    state: present

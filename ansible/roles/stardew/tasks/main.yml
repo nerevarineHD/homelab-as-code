@@ -1,0 +1,71 @@
+---
+- name: Compose project directory
+  ansible.builtin.file:
+    path: "{{ stardew_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Upstream docker-compose.yml
+  ansible.builtin.get_url:
+    url: "{{ stardew_compose_url }}"
+    dest: "{{ stardew_dir }}/docker-compose.yml"
+    mode: "0644"
+    force: true
+  notify: Restart stardew
+
+- name: Compose override (drops CAP_SYS_TIME for LXC, gates the Discord bot)
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: "{{ stardew_dir }}/docker-compose.override.yml"
+    mode: "0644"
+  notify: Restart stardew
+
+- name: .env (secrets from Vault)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ stardew_dir }}/.env"
+    mode: "0600"
+  diff: false
+  no_log: true
+  notify: Restart stardew
+
+- name: Farm settings directory
+  ansible.builtin.file:
+    path: "{{ stardew_dir }}/.local-container/settings"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+
+- name: Seed farm settings (first boot only; the server owns this file after that)
+  ansible.builtin.copy:
+    src: server-settings.json
+    dest: "{{ stardew_dir }}/.local-container/settings/server-settings.json"
+    owner: "1000"
+    group: "1000"
+    mode: "0644"
+    force: false
+
+- name: Check for a Steam session
+  ansible.builtin.command:
+    cmd: docker volume ls -q --filter name=^{{ stardew_project }}_steam-session$
+  register: stardew_steam_volume
+  changed_when: false
+  check_mode: false
+
+- name: Steam login still needed
+  ansible.builtin.debug:
+    msg: >-
+      Steam isn't authenticated yet, so the stack was not started. Once, by hand:
+      ssh root@{{ ansible_host }}, cd {{ stardew_dir }},
+      docker compose run --rm -it steam-auth setup, approve Steam Guard,
+      then re-run this playbook.
+  when: stardew_steam_volume.stdout | length == 0
+
+- name: Start the stack
+  ansible.builtin.command:
+    cmd: docker compose up -d --pull missing
+    chdir: "{{ stardew_dir }}"
+  register: stardew_up
+  changed_when: "'Started' in stardew_up.stderr or 'Created' in stardew_up.stderr"
+  when: stardew_steam_volume.stdout | length > 0

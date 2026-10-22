@@ -1,0 +1,19 @@
+discord_token = "{{ vault_doplarr_discord_token }}"
+log_level = "info"
+public_followup = true
+
+[[backends]]
+media = "movie"
+[backends.config.Seerr]
+url = "http://seerr:5055"
+api_key = "{{ vault_seerr_api_key }}"
+media_filter = "movie"
+fallback_user_id = 3
+
+[[backends]]
+media = "series"
+[backends.config.Seerr]
+url = "http://seerr:5055"
+api_key = "{{ vault_seerr_api_key }}"
+media_filter = "tv"
+fallback_user_id = 3

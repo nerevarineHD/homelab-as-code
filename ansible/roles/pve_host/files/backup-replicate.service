@@ -1,0 +1,9 @@
+[Unit]
+Description=Replicate ZFS datasets to backup pool (syncoid)
+Requires=zfs.target
+After=zfs.target
+
+[Service]
+Environment=HOME=/root
+Type=oneshot
+ExecStart=/usr/bin/flock -n /run/backup-replicate.lock /usr/local/sbin/backup-replicate.sh

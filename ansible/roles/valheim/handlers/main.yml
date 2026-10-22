@@ -1,0 +1,4 @@
+- name: Restart valheim
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ valheim_dir }}"

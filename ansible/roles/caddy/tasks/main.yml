@@ -1,0 +1,86 @@
+# Official package for the systemd unit, caddy user and /etc/caddy; the binary actually run is a
+# build with the Cloudflare DNS plugin (DNS-01 wildcard certs, no inbound ports needed).
+- name: Prerequisites
+  ansible.builtin.apt:
+    name: [debian-keyring, debian-archive-keyring, apt-transport-https, curl, gnupg]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Caddy repo signing key
+  ansible.builtin.shell: >  # noqa: command-instead-of-module (pipes into gpg --dearmor)
+    curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+- name: Caddy apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    mode: "0644"
+    content: "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main\n"
+
+- name: Caddy package (unit, user, dirs)
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+- name: Does the plugin build exist?
+  ansible.builtin.command: "{{ caddy_bin }} list-modules"
+  register: caddy_modules
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Download Caddy with the Cloudflare DNS plugin
+  ansible.builtin.get_url:
+    url: "{{ caddy_download_url }}"
+    dest: "{{ caddy_bin }}"
+    mode: "0755"
+    force: true
+  when: "'dns.providers.cloudflare' not in (caddy_modules.stdout | default('')) or 'http.handlers.crowdsec' not in (caddy_modules.stdout | default(''))"
+  notify: Restart caddy
+
+- name: Cloudflare token for Caddy (root:caddy 0640, never in the Caddyfile)
+  ansible.builtin.copy:
+    dest: /etc/caddy/caddy.env
+    content: "CF_API_TOKEN={{ vault_cloudflare_caddy_token }}\nCROWDSEC_API_KEY={{ vault_crowdsec_caddy_bouncer_key }}\n"
+    owner: root
+    group: caddy
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart caddy
+
+- name: Systemd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/caddy.service.d
+    state: directory
+    mode: "0755"
+
+- name: Run the plugin build, load the token, no --environ (it would log the token)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/caddy.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      EnvironmentFile=/etc/caddy/caddy.env
+      ExecStart=
+      ExecStart={{ caddy_bin }} run --config /etc/caddy/Caddyfile
+      ExecReload=
+      ExecReload={{ caddy_bin }} reload --config /etc/caddy/Caddyfile --force
+  notify: [Reload systemd, Restart caddy]
+
+- name: Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    mode: "0644"
+  notify: Reload caddy
+
+- name: Caddy running
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+    state: started

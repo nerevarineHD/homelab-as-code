@@ -1,0 +1,17 @@
+# Managed by Ansible (roles/ddns). Keeps the listed example.net records pointed at the home IP.
+services:
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:1.17.1
+    container_name: cloudflare-ddns
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [all]
+    security_opt: [no-new-privileges:true]
+    env_file: .env                 # CLOUDFLARE_API_TOKEN (caddy-lab: example.net only)
+    environment:
+      DOMAINS: "{{ ddns_domains }}"
+      PROXIED: "false"             # game traffic can't go through Cloudflare's proxy
+      IP6_PROVIDER: "none"         # no IPv6 on this network
+      UPDATE_CRON: "@every 5m"
+      TZ: America/Los_Angeles

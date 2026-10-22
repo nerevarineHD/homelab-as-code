@@ -1,0 +1,15 @@
+---
+stardew_dir: /opt/stardew
+stardew_project: stardew
+
+# Pre-release project: every tag is a preview build. Pin one, bump on purpose.
+# renovate: datasource=docker depName=sdvd/server versioning=loose
+stardew_image_version: "1.5.0-preview.140"
+
+# Upstream compose file. Replace master with the commit SHA you deployed once
+# it works, so an upstream change can't alter the stack on the next run.
+stardew_compose_ref: 4e4e4eb2f13e7251e566fdeb6557dc2218a5bc2f
+stardew_compose_url: "https://raw.githubusercontent.com/stardew-valley-dedicated-server/server/{{ stardew_compose_ref }}/docker-compose.yml"
+
+stardew_server_name: "Lab Farm"
+stardew_discord_enabled: false

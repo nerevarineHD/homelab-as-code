@@ -1,0 +1,482 @@
+apiVersion: 1
+groups:
+    - orgId: 1
+      name: smart
+      folder: Homelab
+      interval: 15m
+      rules:
+        - uid: bg04q44ko7uv4f
+          title: 'SMART: reallocated sectors increased'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: (smartmon_reallocated_sector_ct_raw_value - smartmon_reallocated_sector_ct_raw_value offset 1d) * on(instance, disk) group_left(serial_number, device_model) smartmon_device_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          annotations:
+            description: Reallocated sector count went up in the last 24h — the drive is remapping failing sectors.
+            summary: Drive {{ $labels.serial_number }} ({{ $labels.device_model }}, now {{ $labels.disk }})
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: eg04q9jwbdwcgd
+          title: 'SMART: pending sectors'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: smartmon_current_pending_sector_raw_value * on(instance, disk) group_left(serial_number, device_model) smartmon_device_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 30m
+          annotations:
+            description: Sectors the drive can't read reliably and is waiting to remap.
+            summary: Drive {{ $labels.serial_number }} ({{ $labels.device_model }}, now {{ $labels.disk }})
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: bg04qck0l6134d
+          title: 'SMART: uncorrectable sectors'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: smartmon_offline_uncorrectable_raw_value * on(instance, disk) group_left(serial_number, device_model) smartmon_device_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 30m
+          annotations:
+            description: The drive found data it could not recover.
+            summary: Drive {{ $labels.serial_number }} ({{ $labels.device_model }}, now {{ $labels.disk }})
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: ag04qfnof9hj4f
+          title: 'SMART: health check failed'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: smartmon_device_smart_healthy * on(instance, disk) group_left(serial_number, device_model) smartmon_device_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 30m
+          annotations:
+            description: The drive's own SMART self-assessment reports failure.
+            summary: Drive {{ $labels.serial_number }} ({{ $labels.device_model }}, now {{ $labels.disk }})
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: ag04qwpj2yry8e
+          title: 'Host collectors: data stale'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: time() - node_textfile_mtime_seconds
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 3600
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: Alerting
+          execErrState: Error
+          annotations:
+            description: 'A node-exporter collector on the Proxmox host stopped writing. For SMART: systemctl status prometheus-node-exporter-smartmon.timer'
+            summary: '{{ $labels.file }} hasn''t updated in over an hour'
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+    - orgId: 1
+      name: targets
+      folder: Homelab
+      interval: 1m
+      rules:
+        - uid: eg1mnhli5reo0e
+          title: Scrape target down
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: up{job!="zfs"}
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 5m
+          annotations:
+            summary: '{{ $labels.job }} ({{ $labels.instance }}) is not responding to Prometheus'
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+    - orgId: 1
+      name: zfs
+      folder: Homelab
+      interval: 1m
+      rules:
+        - uid: afzh56d4jdla8c
+          title: ZFS pool nearly full
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: 100 * zfs_pool_allocated_bytes / zfs_pool_size_bytes
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 90
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 10m
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: afzh59myjxwxse
+          title: ZFS pool unhealthy
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: zfs_pool_health
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 1m
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: bfzh5e95nqd4wa
+          title: ZFS exporter down
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: up{job="zfs"}
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 5m
+          isPaused: false
+          notification_settings:
+            receiver: Discord

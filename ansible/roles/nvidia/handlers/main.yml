@@ -1,0 +1,6 @@
+- name: Update initramfs
+  ansible.builtin.command: update-initramfs -u -k all
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true

@@ -1,0 +1,70 @@
+- name: Baseline for every container
+  hosts: containers
+  roles:
+    - common
+
+- name: Docker engine
+  hosts: docker_hosts
+  roles:
+    - docker
+
+- name: Proxmox host
+  hosts: proxmox
+  roles:
+    - pve_host
+    - role: nvidia
+      vars:
+        nvidia_kernel_module: true
+
+- name: Monitoring stack (CT 104)
+  hosts: monitoring
+  roles:
+    - monitoring
+
+- name: Download + request stack (CT 102)
+  hosts: downloader
+  roles:
+    - downloader
+
+- name: Omada controller (CT 103)
+  hosts: omada
+  roles:
+    - omada
+
+- name: Plex (CT 101)
+  hosts: plex
+  roles:
+    - plex
+
+- name: File shares (CT 100)
+  hosts: storage
+  roles:
+    - samba
+
+- name: Pi-hole + Unbound (CT 105)
+  hosts: dns
+  roles:
+    - pihole
+
+- name: Jellyfin (CT 106)
+  hosts: jellyfin
+  roles:
+    - jellyfin
+    - nvidia
+
+- name: Stardew server (CT 108)
+  hosts: games
+  roles:
+    - stardew
+
+- name: Reverse proxy (CT 107, DMZ)
+  hosts: proxy
+  roles:
+    - crowdsec
+    - caddy
+
+- name: Valheim server (CT 109, DMZ)
+  hosts: valheim
+  roles:
+    - valheim
+    - ddns

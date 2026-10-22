@@ -1,0 +1,5 @@
+# Load only our file: containers can't set kernel-wide keys, so `sysctl --system`
+# fails on Debian's defaults (kernel.*, fs.*, vm.*) inside an LXC.
+- name: Reload sysctl
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/99-disable-ipv6.conf
+  changed_when: true

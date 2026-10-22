@@ -1,0 +1,13 @@
+#!/bin/bash
+# Replicate datasets to the backup pool. Runs all pairs even if one fails.
+PUSH_URL="http://192.168.0.15:3001/api/push/{{ kuma_push_backup_replicate }}"   # Uptime Kuma push URL (step 3)
+rc=0
+for pair in "media/library backup/media-library" "bulk/games backup/bulk-games" "bulk/random backup/bulk-random"; do
+  set -- $pair
+  echo "Replicating $1 -> $2"
+  syncoid --recursive --quiet "$1" "$2" || { echo "FAILED: $1 -> $2" >&2; rc=1; }
+done
+if [ $rc -eq 0 ] && [ -n "$PUSH_URL" ]; then
+  curl -fsS -m 10 "${PUSH_URL}?status=up&msg=OK" >/dev/null || echo "Kuma push failed" >&2
+fi
+exit $rc

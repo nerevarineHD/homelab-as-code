@@ -1,0 +1,13 @@
+# Managed by Ansible - webhook rendered from Vault
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: Discord
+    receivers:
+      - uid: cfzh4uvlbj8cga
+        type: discord
+        settings:
+          url: "{{ vault_grafana_discord_webhook }}"
+          use_discord_username: false
+          use_embed_description: false
+        disableResolveMessage: false

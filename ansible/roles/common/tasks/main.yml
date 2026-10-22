@@ -1,0 +1,25 @@
+# IPv6 on this LAN resolves but doesn't route; these keep apt, curl and Docker on IPv4.
+- name: Force APT to use IPv4 (and retry flaky downloads)
+  ansible.builtin.copy:
+    src: 99force-ipv4
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Prefer IPv4 in getaddrinfo (gai.conf)
+  ansible.builtin.lineinfile:
+    path: /etc/gai.conf
+    regexp: '^#?precedence ::ffff:0:0/96'
+    line: "precedence ::ffff:0:0/96 100"
+
+# Docker's Go resolver ignores gai.conf, so Docker hosts disable IPv6 outright.
+- name: Disable IPv6 on Docker hosts
+  ansible.builtin.copy:
+    src: 99-disable-ipv6.conf
+    dest: /etc/sysctl.d/99-disable-ipv6.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: inventory_hostname in groups['docker_hosts']
+  notify: Reload sysctl

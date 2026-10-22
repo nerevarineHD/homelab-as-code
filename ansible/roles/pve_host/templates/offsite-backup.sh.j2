@@ -1,0 +1,68 @@
+#!/bin/bash
+# offsite-backup.sh - nightly encrypted offsite backup to Google Drive (restic + rclone)
+#
+# What goes offsite:
+#   - bulk/random, bulk/games     (backed up live; mostly static files)
+#   - every CT root disk          (from a temporary ZFS snapshot, so databases are consistent)
+#   - /etc and /root on the host  (host config, rclone token, collector repo)
+# Weekly (Sunday): apply retention, prune, and verify a 5% sample of the data.
+#
+# Snapshots are only taken on rpool/data (CT disks). bulk/* is never snapshotted
+# here, because syncoid replicates bulk/* and would copy a stray snapshot to backup.
+
+set -uo pipefail
+source /root/.restic.env           # RESTIC_REPOSITORY, RESTIC_PASSWORD_FILE, RESTIC_PACK_SIZE
+
+PUSH_URL="http://192.168.0.15:3001/api/push/{{ kuma_push_offsite }}"                        # Uptime Kuma push URL (no ?status part)
+SNAP=restic
+EXCLUDES=/etc/restic-excludes.txt
+
+rc=0
+log() { echo "[$(date '+%F %T')] $*"; }
+
+# CT root disks on local-zfs, e.g. rpool/data/subvol-101-disk-0
+mapfile -t CT_DISKS < <(zfs list -H -o name -r rpool/data | grep -E '/subvol-[0-9]+-disk-[0-9]+$')
+
+cleanup() {
+  for ds in "${CT_DISKS[@]}"; do zfs destroy "$ds@$SNAP" 2>/dev/null; done
+}
+trap cleanup EXIT
+cleanup    # remove anything left over from an interrupted run
+
+paths=()
+
+# live datasets
+for ds in bulk/random bulk/games; do
+  paths+=("$(zfs get -H -o value mountpoint "$ds")")
+done
+
+# CT disks from a consistent point-in-time snapshot
+for ds in "${CT_DISKS[@]}"; do
+  if zfs snapshot "$ds@$SNAP"; then
+    paths+=("$(zfs get -H -o value mountpoint "$ds")/.zfs/snapshot/$SNAP")
+  else
+    log "FAILED to snapshot $ds"; rc=1
+  fi
+done
+
+paths+=(/etc /root)
+
+log "Backing up: ${paths[*]}"
+restic backup "${paths[@]}" --exclude-file="$EXCLUDES" --tag nightly --host pve
+brc=$?
+# exit 3 = finished but some files were unreadable: report it, don't fail the run
+if [ $brc -ne 0 ] && [ $brc -ne 3 ]; then log "restic backup FAILED (exit $brc)"; rc=1; fi
+[ $brc -eq 3 ] && log "restic backup finished with unreadable files (exit 3) - check the log"
+
+if [ "$(date +%u)" = "7" ]; then
+  log "Weekly: forget + prune"
+  restic forget --tag nightly --host pve --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune || rc=1
+  log "Weekly: check (5% data sample)"
+  restic check --read-data-subset=5% || rc=1
+fi
+
+if [ $rc -eq 0 ] && [ -n "$PUSH_URL" ]; then
+  curl -fsS -m 10 "${PUSH_URL}?status=up&msg=OK" >/dev/null || log "Kuma push failed"
+fi
+log "Done (rc=$rc)"
+exit $rc

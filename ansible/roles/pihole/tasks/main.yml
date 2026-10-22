@@ -1,0 +1,131 @@
+# ---- Unbound: private recursive resolver on 127.0.0.1:5335
+- name: Packages
+  ansible.builtin.apt:
+    name: [unbound, curl, ca-certificates, dnsutils]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Unbound config for Pi-hole
+  ansible.builtin.copy:
+    src: unbound-pi-hole.conf
+    dest: /etc/unbound/unbound.conf.d/pi-hole.conf
+    mode: "0644"
+  notify: Restart unbound
+
+# Debian's unbound-resolvconf would point the container's own DNS at Unbound; keep it on 1.1.1.1.
+- name: Remove Debian's resolvconf forwarder snippet
+  ansible.builtin.file:
+    path: /etc/unbound/unbound.conf.d/resolvconf_resolvers.conf
+    state: absent
+  notify: Restart unbound
+
+- name: Disable unbound-resolvconf
+  ansible.builtin.systemd_service:
+    name: unbound-resolvconf
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Unbound running
+  ansible.builtin.systemd_service:
+    name: unbound
+    enabled: true
+    state: started
+
+- name: Apply Unbound config now (frees port 53 before Pi-hole installs)
+  ansible.builtin.meta: flush_handlers
+
+# ---- Pi-hole v6
+- name: Pi-hole config directory
+  ansible.builtin.file:
+    path: /etc/pihole
+    state: directory
+    mode: "0755"
+
+- name: Seed pihole.toml (first install only; Pi-hole manages it afterwards)
+  ansible.builtin.copy:
+    src: pihole.toml
+    dest: /etc/pihole/pihole.toml
+    mode: "0644"
+    force: false
+
+- name: Install Pi-hole (unattended, only if missing)
+  ansible.builtin.shell: curl -sSL https://install.pi-hole.net | bash /dev/stdin --unattended  # noqa: command-instead-of-module
+  args:
+    creates: /usr/local/bin/pihole
+  register: pihole_install
+
+- name: Admin password from Vault (on first install)
+  ansible.builtin.command:
+    argv: [pihole, setpassword, "{{ vault_pihole_admin_password }}"]
+  when: pihole_install.changed or (pihole_set_password | default(false) | bool)
+  no_log: true
+
+- name: Pi-hole running
+  ansible.builtin.systemd_service:
+    name: pihole-FTL
+    enabled: true
+    state: started
+
+# Containers share the host's clock (synced by Proxmox) and an unprivileged CT can't set it,
+# so FTL's built-in NTP client only produces "Insufficient permissions" warnings.
+- name: Read FTL clock-sync setting
+  ansible.builtin.command: pihole-FTL --config ntp.sync.active
+  register: ftl_ntp_sync
+  changed_when: false
+  check_mode: false
+
+- name: Disable FTL clock sync (host keeps time)
+  ansible.builtin.command: pihole-FTL --config ntp.sync.active false
+  when: ftl_ntp_sync.stdout | trim == 'true'
+
+# In an LXC, /proc/loadavg is the HOST's load (24 threads), but FTL compares it to this CT's
+# 1 core, so the "load > number of processors" warning is always a false positive here.
+- name: Read FTL load-check setting
+  ansible.builtin.command: pihole-FTL --config misc.check.load
+  register: ftl_load_check
+  changed_when: false
+  check_mode: false
+
+- name: Disable FTL load check (meaningless inside an LXC)
+  ansible.builtin.command: pihole-FTL --config misc.check.load false
+  when: ftl_load_check.stdout | trim == 'true'
+
+# Answer DNS for the IoT/DMZ VLANs too (LOCAL only answers directly-connected subnets).
+# Port 53 is not forwarded from the WAN; the ER707 ACLs decide which VLANs can reach it.
+- name: Read FTL listening mode
+  ansible.builtin.command: pihole-FTL --config dns.listeningMode
+  register: ftl_listen
+  changed_when: false
+  check_mode: false
+
+- name: Answer DNS from all subnets
+  ansible.builtin.command: pihole-FTL --config dns.listeningMode ALL
+  when: ftl_listen.stdout | trim != 'ALL'
+
+# Split-horizon DNS: at home, every *.example.net name resolves straight to Caddy on CT 107 (DMZ).
+- name: Read Pi-hole extra dnsmasq lines
+  ansible.builtin.command: pihole-FTL --config misc.dnsmasq_lines
+  register: ftl_dnsmasq_lines
+  changed_when: false
+  check_mode: false
+
+- name: "*.example.net -> CT 107 (Caddy)"
+  ansible.builtin.command: >
+    pihole-FTL --config misc.dnsmasq_lines '["address=/example.net/192.168.30.10","address=/valheim.example.net/192.168.30.11"]'
+  notify: Restart pihole-FTL
+  when: "'address=/valheim.example.net/192.168.30.11' not in ftl_dnsmasq_lines.stdout"
+
+# Default 1000 queries/60s per client is too tight for chatty-but-legit devices
+# (the Nanit hits ~1000/min on STUN lookups while setting up live view) and a
+# rate-limited client gets NO answers at all. Only LAN/VLAN clients use this resolver.
+- name: Read FTL rate limit
+  ansible.builtin.command: pihole-FTL --config dns.rateLimit.count
+  register: ftl_rate_limit
+  changed_when: false
+  check_mode: false
+
+- name: Rate limit 5000 queries per 60s per client
+  ansible.builtin.command: pihole-FTL --config dns.rateLimit.count 5000
+  when: ftl_rate_limit.stdout | trim != '5000'

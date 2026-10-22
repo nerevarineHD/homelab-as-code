@@ -1,0 +1,4 @@
+# Collections used by the roles (ansible-lint and fresh control nodes install these).
+collections:
+  - name: community.docker
+  - name: community.general

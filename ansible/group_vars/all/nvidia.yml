@@ -1,0 +1,3 @@
+# NVIDIA driver for the host AND every GPU container (they must match exactly).
+# Upgrade: bump this, run the host (then reboot it), then the GPU containers. See the nvidia role.
+nvidia_driver_version: "595.91.07"

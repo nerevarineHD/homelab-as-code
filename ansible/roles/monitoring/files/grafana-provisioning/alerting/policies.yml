@@ -1,0 +1,7 @@
+# Root notification policy. Rules also pick Discord themselves (notification_settings);
+# this makes Discord the default for anything that doesn't.
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: Discord
+    group_by: [grafana_folder, alertname]

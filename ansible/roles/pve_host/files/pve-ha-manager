@@ -1,0 +1,3 @@
+# select watchdog module (default is softdog)
+#WATCHDOG_MODULE=ipmi_watchdog
+WATCHDOG_MODULE=sp5100_tco

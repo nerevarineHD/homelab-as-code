@@ -1,0 +1,82 @@
+# Config is managed here; app data (dashboards, monitors, metrics) comes from vzdump restores.
+- name: Stack directories (owners match each app's container UID)
+  ansible.builtin.file:
+    path: "/opt/monitoring/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: "", owner: "0" }
+    - { path: "prometheus", owner: "0" }
+    - { path: "prometheus/data", owner: "65534" }   # prometheus runs as nobody
+    - { path: "grafana", owner: "472" }     # grafana's UID
+    - { path: "uptime-kuma", owner: "0" }
+
+- name: Compose file
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: /opt/monitoring/docker-compose.yml
+    mode: "0644"
+
+- name: Secrets (.env)
+  ansible.builtin.template:
+    src: env.j2
+    dest: /opt/monitoring/.env
+    mode: "0600"
+  diff: false
+
+- name: Prometheus config
+  ansible.builtin.copy:
+    src: prometheus.yml
+    dest: /opt/monitoring/prometheus/prometheus.yml
+    mode: "0644"
+  notify: Restart prometheus
+
+# ---- Grafana as code (roles/monitoring/files/grafana-provisioning/): dashboard provider,
+# data source, alert rules, notification policy; the Discord contact point is a template (Vault).
+# Runs before "Stack up" so a fresh CT starts Grafana with everything already in place.
+- name: Grafana provisioning directories
+  ansible.builtin.file:
+    path: "/opt/monitoring/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - grafana-provisioning
+    - grafana-provisioning/dashboards
+    - grafana-provisioning/datasources
+    - grafana-provisioning/alerting
+    - dashboards
+
+- name: Old dashboard provider location (before the subfolders)
+  ansible.builtin.file:
+    path: /opt/monitoring/grafana-provisioning/dashboards.yml
+    state: absent
+
+- name: Grafana provisioning files
+  ansible.builtin.copy:
+    src: grafana-provisioning/
+    dest: /opt/monitoring/grafana-provisioning/
+    mode: "0644"
+  notify: Recreate grafana
+
+- name: Grafana Discord contact point (webhook from Vault)
+  ansible.builtin.template:
+    src: grafana-contact-points.yml.j2
+    dest: /opt/monitoring/grafana-provisioning/alerting/contact-points.yml
+    owner: "472"   # grafana runs as 472:0
+    group: "0"
+    mode: "0640"
+  diff: false
+  notify: Recreate grafana
+
+- name: Grafana dashboards (JSON from the repo)
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: /opt/monitoring/dashboards/
+    mode: "0644"
+
+- name: Stack up
+  community.docker.docker_compose_v2:
+    project_src: /opt/monitoring
+    state: present

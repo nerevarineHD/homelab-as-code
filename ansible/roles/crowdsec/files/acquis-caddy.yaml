@@ -1,0 +1,5 @@
+# Caddy access logs (JSON) -> CrowdSec's caddy parser
+filenames:
+  - /var/log/caddy/access.log
+labels:
+  type: caddy

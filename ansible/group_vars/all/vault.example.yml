@@ -1,0 +1,22 @@
+# Copy to vault.yml, fill in, then: ansible-vault encrypt vault.yml
+vault_cloudflare_caddy_token: CHANGE_ME
+vault_cloudflare_tofu_token: CHANGE_ME
+vault_crowdsec_caddy_bouncer_key: CHANGE_ME
+vault_doplarr_discord_token: CHANGE_ME
+vault_grafana_discord_webhook: CHANGE_ME
+vault_kuma_push_backup_replicate: CHANGE_ME
+vault_kuma_push_offsite: CHANGE_ME
+vault_pia_pass: CHANGE_ME
+vault_pia_user: CHANGE_ME
+vault_pihole_admin_password: CHANGE_ME
+vault_proxmox_discord_token: CHANGE_ME
+vault_pve_exporter_token_value: CHANGE_ME
+vault_samba_plexuser_password: CHANGE_ME
+vault_seerr_api_key: CHANGE_ME
+vault_stardew_api_key: CHANGE_ME
+vault_stardew_server_password: CHANGE_ME
+vault_stardew_steam_password: CHANGE_ME
+vault_stardew_steam_username: CHANGE_ME
+vault_stardew_vnc_password: CHANGE_ME
+vault_valheim_server_password: CHANGE_ME
+vault_valheim_supervisor_password: CHANGE_ME

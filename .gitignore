@@ -1,0 +1,13 @@
+# never commit real secrets or app data
+.env
+*.env
+!*.env.example
+**/data/
+*.db
+*.sqlite*
+*.key
+*.pem
+# OpenTofu: providers are re-downloadable; state stays local (covered by restic via /root)
+tofu/.terraform/
+tofu/*.tfstate
+tofu/*.tfstate.*

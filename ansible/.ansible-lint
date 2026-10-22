@@ -1,0 +1,5 @@
+# Run from ansible/:  ansible-lint
+profile: production
+exclude_paths:
+  - group_vars/all/vault.yml     # Ansible Vault; CI has no password
+  - roles/monitoring/files/grafana-provisioning/alerting/rules.yml   # verbatim Grafana export; re-exported, not hand-edited

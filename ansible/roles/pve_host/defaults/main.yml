@@ -1,0 +1,18 @@
+# renovate: datasource=github-releases depName=pdf/zfs_exporter
+pve_host_zfs_exporter_version: "2.3.12"
+# renovate: datasource=github-releases depName=gitleaks/gitleaks
+pve_host_gitleaks_version: "8.28.0"      # secret scanner used by scripts/publish-public.sh
+pve_host_packages:
+  - sanoid
+  - mbuffer
+  - pv
+  - smartmontools
+  - prometheus-node-exporter
+  - prometheus-node-exporter-collectors
+  - restic
+  - git
+  - tmux
+  - unrar
+# Discord embed body for Proxmox notifications (base64, as stored by Proxmox)
+pve_host_discord_body_b64: "ewogICJ1c2VybmFtZSI6ICJQcm94bW94IiwKICAiZW1iZWRzIjogWwogICAgewogICAgICAidGl0bGUiOiAie3sgZXNjYXBlIHRpdGxlIH19IiwKICAgICAgImZpZWxkcyI6IFsKICAgICAgICB7ICJuYW1lIjogIlNldmVyaXR5IiwgInZhbHVlIjogInt7IGVzY2FwZSBzZXZlcml0eSB9fSIsICJpbmxpbmUiOiB0cnVlIH17eyNpZiBmaWVsZHMudHlwZX19LAogICAgICAgIHsgIm5hbWUiOiAiVHlwZSIsICJ2YWx1ZSI6ICJ7eyBlc2NhcGUgZmllbGRzLnR5cGUgfX0iLCAiaW5saW5lIjogdHJ1ZSB9e3svaWZ9fXt7I2lmIGZpZWxkcy5qb2ItaWR9fSwKICAgICAgICB7ICJuYW1lIjogIkpvYiIsICJ2YWx1ZSI6ICJ7eyBlc2NhcGUgZmllbGRzLmpvYi1pZCB9fSIsICJpbmxpbmUiOiB0cnVlIH17ey9pZn19LAogICAgICAgIHsgIm5hbWUiOiAiV2hlbiIsICJ2YWx1ZSI6ICI8dDp7eyB0aW1lc3RhbXAgfX0+IiB9CiAgICAgIF0KICAgIH0KICBdCn0="  # noqa: yaml[line-length]
+pve_host_discord_matcher: dicord-alerts

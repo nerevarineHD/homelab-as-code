@@ -1,0 +1,4 @@
+# true on the Proxmox host (kernel module via DKMS); false in containers (user-space libraries only)
+nvidia_kernel_module: false
+nvidia_run_file: "NVIDIA-Linux-x86_64-{{ nvidia_driver_version }}.run"
+nvidia_run_url: "https://us.download.nvidia.com/XFree86/Linux-x86_64/{{ nvidia_driver_version }}/{{ nvidia_run_file }}"

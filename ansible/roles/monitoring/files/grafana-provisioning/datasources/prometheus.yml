@@ -1,0 +1,9 @@
+apiVersion: 1
+datasources:
+  - name: prometheus
+    uid: afzfzrvuet79cd      # alert rules and dashboards reference this uid; never change it
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

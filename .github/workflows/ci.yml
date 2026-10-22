@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tofu:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tofu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.10.6
+      - name: Format
+        run: tofu fmt -check -recursive -diff
+      - name: Init (no backend, no credentials)
+        run: tofu init -backend=false -input=false
+      - name: Validate
+        run: |
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/ci_key"
+          TF_VAR_ssh_pubkey_file="$RUNNER_TEMP/ci_key.pub" tofu validate
+
+  ansible-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          pip install ansible-core ansible-lint
+          ansible-galaxy collection install -r requirements.yml
+      - name: Lint
+        run: |
+          # ansible.cfg points at the host's vault password file; CI has no vault.
+          printf 'ci\n' > "$RUNNER_TEMP/vault-pass"
+          rm -f group_vars/all/vault.yml
+          ANSIBLE_VAULT_PASSWORD_FILE="$RUNNER_TEMP/vault-pass" ansible-lint
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact -v .

@@ -1,0 +1,10 @@
+[Unit]
+Description=ZFS Prometheus exporter
+After=zfs.target
+
+[Service]
+ExecStart=/usr/local/bin/zfs_exporter --web.listen-address=:9134
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

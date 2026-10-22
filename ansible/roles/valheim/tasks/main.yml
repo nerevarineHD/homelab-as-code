@@ -1,0 +1,29 @@
+- name: Valheim directories
+  ansible.builtin.file:
+    path: "{{ valheim_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", config, data]
+
+- name: Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ valheim_dir }}/docker-compose.yml"
+    mode: "0644"
+  notify: Restart valheim
+
+- name: Server password from Vault (0600)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ valheim_dir }}/.env"
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart valheim
+
+- name: Valheim running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ valheim_dir }}"
+  register: valheim_up
+  changed_when: "'Started' in valheim_up.stderr or 'Created' in valheim_up.stderr"

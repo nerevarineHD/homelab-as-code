@@ -1,0 +1,46 @@
+# Config is managed here; app data (*arr databases, Seerr users/requests) comes from vzdump restores.
+# Bind mounts /mnt/downloads and /mnt/media come from the CT definition (OpenTofu, Phase 4).
+- name: Stack directories
+  ansible.builtin.file:
+    path: "/opt/downloader/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: "", owner: "0" }
+    - { path: "qbittorrent-config", owner: "0" }
+    - { path: "prowlarr-config", owner: "0" }
+    - { path: "radarr-config", owner: "0" }
+    - { path: "sonarr-config", owner: "0" }
+    - { path: "doplarr", owner: "0" }
+    - { path: "seerr", owner: "1000" }   # Seerr runs as UID 1000
+
+- name: Compose files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/downloader/{{ item }}"
+    mode: "0644"
+  loop:
+    - docker-compose.yml
+    - docker-compose.override.yml
+
+- name: VPN credentials (.env)
+  ansible.builtin.template:
+    src: env.j2
+    dest: /opt/downloader/.env
+    mode: "0600"
+  diff: false
+
+- name: DoplarrRS config
+  ansible.builtin.template:
+    src: doplarr-config.toml.j2
+    dest: /opt/downloader/doplarr/config.toml
+    mode: "0644"
+  diff: false
+  notify: Restart doplarr
+
+- name: Stack up (docker-compose.yml + override)
+  community.docker.docker_compose_v2:
+    project_src: /opt/downloader
+    state: present

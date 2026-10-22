@@ -1,0 +1,3 @@
+# Seed config for the unattended install only; Pi-hole owns this file afterwards.
+[dns]
+  upstreams = ["127.0.0.1#5335"]

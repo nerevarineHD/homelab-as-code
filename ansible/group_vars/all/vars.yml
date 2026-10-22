@@ -1,0 +1,2 @@
+kuma_push_backup_replicate: "{{ vault_kuma_push_backup_replicate }}"
+kuma_push_offsite: "{{ vault_kuma_push_offsite }}"
