@@ -1,0 +1,17 @@
+# Managed by Ansible (roles/ai). Ollama API on 127.0.0.1:11434 only; Open WebUI is the front door.
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="OLLAMA_HOST=127.0.0.1:11434"
+# keep one model loaded 30 min after its last use, then free the VRAM for Jellyfin
+Environment="OLLAMA_KEEP_ALIVE=30m"
+
+[Install]
+WantedBy=multi-user.target

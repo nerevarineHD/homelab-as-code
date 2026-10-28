@@ -1,0 +1,70 @@
+---
+# CT 110: Ollama (native, uses the NVIDIA libraries from the nvidia role) + Open WebUI (Docker).
+# Models and chats are app data (vzdump), not Ansible.
+- name: Packages for the Ollama install
+  ansible.builtin.apt:
+    name: [curl, zstd]
+    state: present
+
+- name: Ollama user
+  ansible.builtin.user:
+    name: ollama
+    system: true
+    shell: /bin/false
+    home: /usr/share/ollama
+    create_home: true
+
+- name: Ollama install, only when the version changes - {{ ai_ollama_version }}
+  ansible.builtin.shell: |  # noqa: command-instead-of-module (curl | tar of the release archive)
+    set -eo pipefail
+    rm -rf /usr/lib/ollama
+    curl -fsSL "{{ ai_ollama_url }}" | tar --zstd -x -C /usr
+    touch "/usr/lib/ollama/.homelab-v{{ ai_ollama_version }}"
+  args:
+    executable: /bin/bash
+    creates: "/usr/lib/ollama/.homelab-v{{ ai_ollama_version }}"
+  notify: Restart ollama
+
+- name: Ollama service unit
+  ansible.builtin.copy:
+    src: ollama.service
+    dest: /etc/systemd/system/ollama.service
+    mode: "0644"
+  notify: Restart ollama
+
+- name: Ollama running
+  ansible.builtin.systemd_service:
+    name: ollama
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Open WebUI directories
+  ansible.builtin.file:
+    path: "{{ ai_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", data]
+
+- name: Open WebUI compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ai_dir }}/docker-compose.yml"
+    mode: "0644"
+  notify: Restart open-webui
+
+- name: Open WebUI secrets from Vault (0600)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ ai_dir }}/.env"
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart open-webui
+
+- name: Open WebUI running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ ai_dir }}"
+  register: ai_webui_up
+  changed_when: "'Started' in ai_webui_up.stderr or 'Created' in ai_webui_up.stderr"

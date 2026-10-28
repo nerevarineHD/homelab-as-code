@@ -68,3 +68,9 @@
   roles:
     - valheim
     - ddns
+
+- name: Ollama + Open WebUI (CT 110)
+  hosts: ai
+  roles:
+    - nvidia
+    - ai

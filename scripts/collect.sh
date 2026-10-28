@@ -10,7 +10,7 @@ REPO=/root/homelab
 REMOTE=git@github.com:<you>/homelab.git
 
 # CT id -> folder name
-declare -A CTS=( [100]=storage [101]=plex [102]=downloader [103]=omada [104]=monitoring [105]=dns [106]=jellyfin [107]=proxy [108]=games [109]=valheim )
+declare -A CTS=( [100]=storage [101]=plex [102]=downloader [103]=omada [104]=monitoring [105]=dns [106]=jellyfin [107]=proxy [108]=games [109]=valheim [110]=ai )
 
 # App files to capture inside each CT (paths relative to /, globs/find allowed)
 declare -A CT_FILES=(
@@ -24,6 +24,7 @@ declare -A CT_FILES=(
   [108]="opt/stardew/docker-compose.yml opt/stardew/docker-compose.override.yml opt/stardew/.env opt/stardew/.local-container/settings/server-settings.json"
   [107]="etc/caddy/Caddyfile etc/crowdsec/acquis.d etc/crowdsec/config.yaml.local"
   [109]="opt/valheim/docker-compose.yml opt/ddns/docker-compose.yml"
+  [110]="opt/openwebui/docker-compose.yml etc/systemd/system/ollama.service"   # not .env: OpenRouter keys
 )
 
 # Per-CT system tweaks worth keeping everywhere (IPv6 workarounds etc.)

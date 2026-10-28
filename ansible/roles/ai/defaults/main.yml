@@ -1,0 +1,7 @@
+---
+ai_dir: /opt/openwebui
+# renovate: datasource=github-releases depName=ollama/ollama
+ai_ollama_version: "0.40.12"
+ai_ollama_url: "https://github.com/ollama/ollama/releases/download/v{{ ai_ollama_version }}/ollama-linux-amd64.tar.zst"
+# Open WebUI port on the CT (host networking); Ollama stays on 127.0.0.1:11434
+ai_webui_port: 8080

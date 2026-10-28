@@ -1,0 +1,14 @@
+# Managed by Ansible (roles/ai). Open WebUI, talking to Ollama on localhost and to OpenRouter.
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.12.1
+    container_name: open-webui
+    network_mode: host            # reaches Ollama on 127.0.0.1:11434
+    env_file: .env
+    environment:
+      - PORT={{ ai_webui_port }}
+      - OLLAMA_BASE_URL=http://127.0.0.1:11434
+      - DEFAULT_USER_ROLE=pending # new sign-ups wait for the admin to approve them
+    volumes:
+      - ./data:/app/backend/data
+    restart: unless-stopped
