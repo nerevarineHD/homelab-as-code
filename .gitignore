@@ -11,3 +11,4 @@
 tofu/.terraform/
 tofu/*.tfstate
 tofu/*.tfstate.*
+__pycache__/

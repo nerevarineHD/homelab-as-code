@@ -1,0 +1,11 @@
+# Managed by Ansible (scripts role)
+[Unit]
+Description=Schedule for {{ scripts_job.name }}
+
+[Timer]
+OnCalendar={{ scripts_job.on_calendar }}
+RandomizedDelaySec={{ scripts_job.randomized_delay | default(0) }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

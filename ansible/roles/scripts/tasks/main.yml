@@ -1,0 +1,81 @@
+---
+# CT 112: scheduled scripts (see defaults/main.yml for the job list and layout).
+# Logs: journalctl -u <name>. Schedules: systemctl list-timers.
+- name: Packages
+  ansible.builtin.apt:
+    name: [python3, curl, ca-certificates]
+    state: present
+    update_cache: true  # a fresh CT's package lists predate security updates (404s otherwise)
+    cache_valid_time: 3600
+
+- name: Scripts user (system account, no login)
+  ansible.builtin.user:
+    name: "{{ scripts_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Script and secrets directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ scripts_dir }}", mode: "0755" }
+    - { path: "{{ scripts_env_dir }}", mode: "0700" }  # systemd reads the env files as root
+
+- name: Job files
+  ansible.builtin.copy:
+    src: "{{ scripts_job.name }}/"
+    dest: "{{ scripts_dir }}/{{ scripts_job.name }}/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  loop: "{{ scripts_jobs }}"
+  loop_control:
+    loop_var: scripts_job
+    label: "{{ scripts_job.name }}"
+
+- name: Job secrets
+  ansible.builtin.template:
+    src: job.env.j2
+    dest: "{{ scripts_env_dir }}/{{ scripts_job.name }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ scripts_jobs }}"
+  loop_control:
+    loop_var: scripts_job
+    label: "{{ scripts_job.name }}"
+  no_log: true
+
+- name: Job units
+  ansible.builtin.template:
+    src: "job.{{ scripts_unit }}.j2"
+    dest: "/etc/systemd/system/{{ scripts_job.name }}.{{ scripts_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ scripts_jobs | product(['service', 'timer']) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}.{{ item.1 }}"
+  vars:
+    scripts_job: "{{ item.0 }}"
+    scripts_unit: "{{ item.1 }}"
+  notify: Reload systemd
+
+- name: Reload systemd before enabling new timers
+  ansible.builtin.meta: flush_handlers
+
+- name: Timers enabled
+  ansible.builtin.systemd_service:
+    name: "{{ scripts_job.name }}.timer"
+    enabled: true
+    state: started
+  loop: "{{ scripts_jobs }}"
+  loop_control:
+    loop_var: scripts_job
+    label: "{{ scripts_job.name }}"

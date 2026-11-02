@@ -1,0 +1,44 @@
+#!/usr/bin/python3
+# Managed by Ansible (roles/agent). Claude Code PreToolUse hook for Bash.
+# Second wall behind the permission rules: catches the same things inside compound commands,
+# subshells and pipes, where prefix rules don't look. Every command is logged to the journal
+# (journalctl -t agent-guard), which the agent user can't edit.
+# Exit 0 = no objection (normal permissions still apply). Exit 2 = blocked, stderr goes to Claude.
+import json
+import re
+import subprocess
+import sys
+
+BLOCK = [
+    (r"\b(tofu|terraform)\s+(\S+\s+)*(apply|destroy|import|taint|untaint|state\s+(rm|mv|push))\b",
+     "infrastructure changes are applied by the admin on pve, never here"),
+    (r"\bansible-(vault|playbook)\b", "no Ansible runs or vault access from the agent"),
+    (r"(^|[;&|(`\s])(sudo|su|doas|pkexec)(\s|$)", "no privilege escalation"),
+    (r"(^|[;&|(`\s])(ssh|scp|sftp|rsync|nc|ncat|socat|telnet)(\s|$)", "no remote shells or raw sockets in phase 1"),
+    (r"\b(pct|qm|pvesh|pveam|zfs|zpool)\b", "no Proxmox or ZFS commands"),
+    (r"\bgit\s+(\S+\s+)*(push|remote\s+(add|set-url))\b", "phase 1 is read-only: no pushes or new remotes"),
+    (r"\.ssh/id_|\.credentials\.json|ansible-vault-pass|/etc/claude-code", "no reading keys, credentials or the harness config"),
+    (r"\brm\s+(-\w*[rf]\w*\s+)+(/|~|\$HOME)(\s|$)", "no recursive deletes of / or home"),
+    (r"(curl|wget)\b.*\|\s*(ba|z|da)?sh\b", "no piping downloads into a shell"),
+]
+
+
+def main() -> int:
+    try:
+        event = json.load(sys.stdin)
+    except ValueError:
+        return 0
+    cmd = (event.get("tool_input") or {}).get("command", "")
+    if not cmd:
+        return 0
+    for pattern, why in BLOCK:
+        if re.search(pattern, cmd):
+            subprocess.run(["logger", "-t", "agent-guard", "-p", "auth.warning", f"BLOCKED ({why}): {cmd}"], check=False)
+            print(f"Blocked by the homelab harness: {why}.", file=sys.stderr)
+            return 2
+    subprocess.run(["logger", "-t", "agent-guard", f"allowed to ask: {cmd}"], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

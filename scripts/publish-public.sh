@@ -61,7 +61,7 @@ grep -c ': CHANGE_ME' "$STAGE/ansible/group_vars/all/vault.example.yml" | sed 's
 say "Scrubbing domains and zone IDs"
 grep -rlIZ . "$STAGE" | xargs -0 sed -i -E "$SCRUB"
 sed -i -E 's/"[0-9a-f]{32}"/"00000000000000000000000000000000"/' "$STAGE/tofu/cloudflare-dns.tf"
-sed -i -E 's#nerevarineHD/homelab\.git#<you>/homelab.git#' "$STAGE/scripts/collect.sh"
+sed -i -E 's#nerevarineHD/homelab\.git#<you>/homelab.git#' "$STAGE/scripts/collect.sh" "$STAGE/ansible/roles/agent/defaults/main.yml"
 tofu fmt -recursive "$STAGE/tofu" >/dev/null     # renamed keys change HCL alignment
 
 say "Checking for anything that must not be public"

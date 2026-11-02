@@ -1,0 +1,131 @@
+---
+# CT 111: Claude Code harness sandbox, phase 1 (read-only).
+# Header comment: managed-settings.json takes no comments, so its rules are explained here and in CLAUDE.md.
+# Walls, outside in: Proxmox firewall (tofu/agent.tf) -> unprivileged CT -> non-root user without
+# sudo -> read-only deploy key -> managed Claude Code settings + guard hook the user can't edit.
+- name: Packages
+  ansible.builtin.apt:
+    name: [git, curl, ca-certificates, python3, ripgrep, less, tmux, acl]
+    state: present
+    update_cache: true  # a fresh CT's package lists predate security updates (404s otherwise)
+    cache_valid_time: 3600
+
+- name: Agent user (no sudo)
+  ansible.builtin.user:
+    name: "{{ agent_user }}"
+    shell: /bin/bash
+    groups: []
+    append: false
+    create_home: true
+    home: "{{ agent_home }}"
+
+- name: No sudo package at all
+  ansible.builtin.apt:
+    name: sudo
+    state: absent
+
+- name: Claude Code managed settings directory
+  ansible.builtin.file:
+    path: /etc/claude-code
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Managed settings (permissions, hook, no auto-update)
+  ansible.builtin.template:
+    src: managed-settings.json.j2
+    dest: /etc/claude-code/managed-settings.json
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Managed CLAUDE.md (house rules)
+  ansible.builtin.copy:
+    src: CLAUDE.md
+    dest: /etc/claude-code/CLAUDE.md
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Guard hook
+  ansible.builtin.copy:
+    src: agent-guard
+    dest: /usr/local/bin/agent-guard
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Claude Code, only when the version changes - {{ agent_claude_code_version }}
+  ansible.builtin.shell: |  # noqa: command-instead-of-module (official installer, pinned version)
+    set -eo pipefail
+    curl -fsSL https://claude.ai/install.sh | bash -s "{{ agent_claude_code_version }}"
+    mkdir -p "{{ agent_home }}/.local/share/claude"
+    touch "{{ agent_home }}/.local/share/claude/.homelab-v{{ agent_claude_code_version }}"
+  args:
+    executable: /bin/bash
+    creates: "{{ agent_home }}/.local/share/claude/.homelab-v{{ agent_claude_code_version }}"
+  become: true
+  become_user: "{{ agent_user }}"
+  become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
+
+- name: SSH directory
+  ansible.builtin.file:
+    path: "{{ agent_home }}/.ssh"
+    state: directory
+    owner: "{{ agent_user }}"
+    group: "{{ agent_user }}"
+    mode: "0700"
+
+- name: Deploy key for the repo (made here, the private half never leaves the CT)
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N "" -C "agent-ct111-readonly" -f {{ agent_home }}/.ssh/id_ed25519
+    creates: "{{ agent_home }}/.ssh/id_ed25519"
+  become: true
+  become_user: "{{ agent_user }}"
+  become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
+
+- name: GitHub host key
+  ansible.builtin.known_hosts:
+    path: "{{ agent_home }}/.ssh/known_hosts"
+    name: github.com
+    key: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+  become: true
+  become_user: "{{ agent_user }}"
+  become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
+
+- name: Read the deploy key's public half
+  ansible.builtin.slurp:
+    src: "{{ agent_home }}/.ssh/id_ed25519.pub"
+  register: agent_pubkey
+  check_mode: false
+
+- name: Can the deploy key read the repo yet?
+  ansible.builtin.command:  # noqa: command-instead-of-module (ls-remote only checks access; the git module can't)
+    cmd: git ls-remote --heads {{ agent_repo_url }}
+  become: true
+  become_user: "{{ agent_user }}"
+  become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
+  register: agent_repo_access
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Deploy key not added yet - add this as a READ-ONLY deploy key, then re-run
+  ansible.builtin.debug:
+    msg:
+      - "GitHub -> nerevarineHD/homelab -> Settings -> Deploy keys -> Add deploy key"
+      - "Title: agent-ct111-readonly   Allow write access: OFF"
+      - "{{ agent_pubkey.content | b64decode | trim }}"
+  when: agent_repo_access.rc != 0
+
+- name: Clone the repo (read-only key; the agent pulls updates itself)
+  ansible.builtin.git:
+    repo: "{{ agent_repo_url }}"
+    dest: "{{ agent_repo_dir }}"
+    version: main
+    update: false
+  become: true
+  become_user: "{{ agent_user }}"
+  become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
+  when: agent_repo_access.rc == 0

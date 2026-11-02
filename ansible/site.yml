@@ -74,3 +74,13 @@
   roles:
     - nvidia
     - ai
+
+- name: Claude Code harness sandbox (CT 111, read-only, firewalled from the LAN)
+  hosts: agent
+  roles:
+    - agent
+
+- name: Scheduled scripts (CT 112)
+  hosts: scripts
+  roles:
+    - scripts

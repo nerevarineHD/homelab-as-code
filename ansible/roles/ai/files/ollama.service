@@ -12,6 +12,11 @@ RestartSec=3
 Environment="OLLAMA_HOST=127.0.0.1:11434"
 # keep one model loaded 30 min after its last use, then free the VRAM for Jellyfin
 Environment="OLLAMA_KEEP_ALIVE=30m"
+# 16K context by default (Ollama's 4096 is too small for the Homelab model's prompt + doc chunks).
+# Flash attention + q8_0 KV cache halve the context's VRAM: qwen3:8b at 16K is ~6.7 GB of the 8 GB card.
+Environment="OLLAMA_CONTEXT_LENGTH=16384"
+Environment="OLLAMA_FLASH_ATTENTION=1"
+Environment="OLLAMA_KV_CACHE_TYPE=q8_0"
 
 [Install]
 WantedBy=multi-user.target

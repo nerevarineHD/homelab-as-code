@@ -2,10 +2,12 @@
 vault_cloudflare_caddy_token: CHANGE_ME
 vault_cloudflare_tofu_token: CHANGE_ME
 vault_crowdsec_caddy_bouncer_key: CHANGE_ME
+vault_discord_user_id: CHANGE_ME
 vault_doplarr_discord_token: CHANGE_ME
 vault_grafana_discord_webhook: CHANGE_ME
 vault_kuma_push_backup_replicate: CHANGE_ME
 vault_kuma_push_offsite: CHANGE_ME
+vault_kuma_push_swim_watch: CHANGE_ME
 vault_openrouter_general_key: CHANGE_ME
 vault_openrouter_private_key: CHANGE_ME
 vault_openwebui_secret_key: CHANGE_ME
@@ -21,5 +23,6 @@ vault_stardew_server_password: CHANGE_ME
 vault_stardew_steam_password: CHANGE_ME
 vault_stardew_steam_username: CHANGE_ME
 vault_stardew_vnc_password: CHANGE_ME
+vault_swim_watch_site_ids: CHANGE_ME
 vault_valheim_server_password: CHANGE_ME
 vault_valheim_supervisor_password: CHANGE_ME

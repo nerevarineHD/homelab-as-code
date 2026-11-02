@@ -1,0 +1,16 @@
+# Managed by Ansible (scripts role)
+[Unit]
+Description={{ scripts_job.description }}
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User={{ scripts_user }}
+Group={{ scripts_user }}
+WorkingDirectory={{ scripts_dir }}/{{ scripts_job.name }}
+EnvironmentFile={{ scripts_env_dir }}/{{ scripts_job.name }}.env
+StateDirectory=scripts/{{ scripts_job.name }}
+ExecStart={{ scripts_job.command }}
+TimeoutStartSec={{ scripts_job.timeout | default(300) }}
+NoNewPrivileges=true

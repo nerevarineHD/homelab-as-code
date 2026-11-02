@@ -1,0 +1,32 @@
+---
+# CT 112: small scheduled scripts. Each job gets its files in /opt/scripts/<name>/, secrets in
+# /etc/scripts/<name>.env (0600, rendered from Vault), state in /var/lib/scripts/<name>/ and a
+# <name>.service + <name>.timer, run as the unprivileged scripts user.
+# Add a job: put its files in files/<name>/, add an entry below, run the playbook.
+# Removing one is manual for now: disable the timer, delete its units, env file and folder.
+scripts_user: scripts
+scripts_dir: /opt/scripts
+scripts_env_dir: /etc/scripts
+scripts_kuma_push_base: "http://192.168.0.15:3001/api/push"
+
+# Same Discord channel Proxmox and Uptime Kuma alert to (uptime-kuma-alerts). Jobs set their own
+# DISCORD_USERNAME so their posts are easy to tell apart.
+scripts_discord_webhook: "https://discord.com/api/webhooks/{{ vault_proxmox_discord_token }}"
+# Who new-listing style alerts @mention. Empty = no mention.
+scripts_discord_mention: "{{ '<@' ~ vault_discord_user_id ~ '>' if (vault_discord_user_id | default('')) else '' }}"
+
+scripts_jobs:
+  - name: swim-watch
+    description: Seattle Parks swim-lesson watcher (new parent-child listings to Discord)
+    command: /usr/bin/python3 swim_watch.py
+    on_calendar: "*:0/10"   # every 10 minutes...
+    randomized_delay: 90    # ...give or take 90 s, so the polls don't land on a fixed beat
+    timeout: 120
+    env:
+      SITE_IDS: "{{ vault_swim_watch_site_ids }}"   # which pool(s): in the vault so the public copy doesn't name one
+      DISCORD_WEBHOOK: "{{ scripts_discord_webhook }}"
+      DISCORD_USERNAME: Swim Watch
+      DISCORD_MENTION: "{{ scripts_discord_mention }}"
+      KUMA_PUSH_URL: "{{ scripts_kuma_push_base }}/{{ kuma_push_swim_watch }}"
+      STATE_FILE: /var/lib/scripts/swim-watch/state.json
+      MAX_JITTER_SEC: "0"   # the timer's RandomizedDelaySec does the jitter

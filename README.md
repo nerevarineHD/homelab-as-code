@@ -26,9 +26,11 @@ This is a sanitized, read-only mirror of a private repo, published by
 | 108 | Stardew Valley server | |
 | 109 | Valheim server + Cloudflare DDNS | on the DMZ |
 | 110 | Ollama + Open WebUI | local models on the GPU, cloud models via OpenRouter (separate ZDR-only key for private chats) |
+| 111 | Claude Code agent sandbox | read-only clone of this repo; Proxmox firewall blocks every private range, managed settings + a guard hook block apply/push/secrets |
+| 112 | Scheduled scripts | small jobs as systemd timers under a non-root user, each alerting to Discord and heartbeating to Uptime Kuma |
 
 Host: Ryzen 9 3900X, 64 GB RAM, NVMe boot pool, three ZFS data pools (media, bulk, an 18 TB backup
-target). Containers 100–104 are privileged (bind mounts, Docker); 105–110 are unprivileged.
+target). Containers 100–104 are privileged (bind mounts, Docker); 105–112 are unprivileged.
 
 ## Network
 
@@ -49,7 +51,8 @@ flowchart LR
     seerr["CT 102 Seerr :5055"]
     pihole["CT 105 Pi-hole"]
     plex["CT 101 Plex :32400"]
-    other["CTs 100, 103, 104, 108, 110"]
+    other["CTs 100, 103, 104, 108, 110, 112"]
+    agent["CT 111 agent<br/>Proxmox firewall: internet only"]
   end
 
   subgraph iot["VLAN 20 · IoT"]
@@ -81,7 +84,7 @@ flowchart LR
 
 - [`tofu/`](tofu): one resource per container, pinned IDs/MACs/IPs, Cloudflare DNS (SPF/DMARC "no mail"
   records for domains that never send email). Imported from the running system; no plan diff.
-- [`ansible/`](ansible): 17 roles, one play per container, run from the host. Config is managed;
+- [`ansible/`](ansible): 19 roles, one play per container, run from the host. Config is managed;
   app data (libraries, databases, metrics) is not, and comes back from backups.
 - Grafana is fully provisioned: data source with a pinned UID, dashboards as JSON, alert rules,
   notification policy and the Discord contact point (webhook from the vault). Rules are locked in
@@ -135,7 +138,7 @@ nightly one, and a provisioning file Grafana can't read takes all of Grafana dow
 
 ```
 tofu/        OpenTofu: containers, GPU passthrough, Cloudflare DNS
-ansible/     inventory, site.yml, 17 roles, group_vars (vault.example.yml here)
+ansible/     inventory, site.yml, 19 roles, group_vars (vault.example.yml here)
 scripts/     publish-public.sh, collect.sh (live-config snapshot with secrets scrubbed),
              tofu-env.sh, media-library maintenance scripts
 .github/     CI
