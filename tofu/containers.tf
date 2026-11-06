@@ -214,97 +214,6 @@ resource "proxmox_virtual_environment_container" "omada" {
   }
 }
 
-# __generated__ by OpenTofu
-resource "proxmox_virtual_environment_container" "plex" {
-  lifecycle {
-    ignore_changes = [operating_system[0].template_file_id, initialization[0].user_account]
-  }
-
-  delete_unreferenced_disks_on_destroy = false
-  description                          = ""
-  environment_variables                = {}
-  hook_script_file_id                  = ""
-  node_name                            = "pve"
-  pool_id                              = null
-  protection                           = false
-  purge_on_destroy                     = true
-  start_on_boot                        = true
-  started                              = true
-  tags                                 = []
-  template                             = false
-  timeout_clone                        = null
-  timeout_create                       = null
-  timeout_delete                       = null
-  timeout_update                       = null
-  unprivileged                         = false
-  vm_id                                = 101
-  console {
-    enabled   = true
-    tty_count = 2
-    type      = "tty"
-  }
-  cpu {
-    architecture = "amd64"
-    cores        = 4
-    limit        = 0
-  }
-  disk {
-    acl           = false
-    datastore_id  = "local-zfs"
-    mount_options = []
-    quota         = false
-    replicate     = false
-    size          = 32
-  }
-  initialization {
-    user_account {
-      keys = [local.ansible_ssh_key]
-    }
-    hostname = "plex"
-    ip_config {
-      ipv4 {
-        address = "192.168.0.12/24"
-        gateway = "192.168.0.1"
-      }
-    }
-  }
-  memory {
-    dedicated = 4096
-    swap      = 2048
-  }
-  mount_point {
-    acl           = false
-    backup        = false
-    mount_options = []
-    path          = "/mnt/media"
-    quota         = false
-    read_only     = true
-    replicate     = true
-    shared        = false
-    size          = ""
-    volume        = "/media/library"
-  }
-  network_interface {
-    bridge       = "vmbr0"
-    enabled      = true
-    firewall     = true
-    host_managed = false
-    mac_address  = "BC:24:11:18:C7:1A"
-    mtu          = 0
-    name         = "eth0"
-    rate_limit   = 0
-    vlan_id      = 0
-  }
-  operating_system {
-    template_file_id = local.ct_template
-    type             = "debian"
-  }
-  startup {
-    down_delay = -1
-    order      = 2
-    up_delay   = 15
-  }
-}
 
 # __generated__ by OpenTofu
 resource "proxmox_virtual_environment_container" "storage" {
@@ -419,5 +328,14 @@ resource "proxmox_virtual_environment_container" "storage" {
     down_delay = -1
     order      = 1
     up_delay   = 15
+  }
+}
+
+# CT 101 (plex) compromised 2026-11-06 via Plex2Shell. Kept on disk as evidence, unmanaged.
+# See docs/incidents/2026-11-06-plex-compromise.md
+removed {
+  from = proxmox_virtual_environment_container.plex
+  lifecycle {
+    destroy = false
   }
 }

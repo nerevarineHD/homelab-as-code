@@ -16,7 +16,7 @@ This is a sanitized, read-only mirror of a private repo, published by
 | CT | Service | Notes |
 |---|---|---|
 | 100 | Samba file shares | bind mounts from the ZFS pools |
-| 101 | Plex | |
+| 101 | Plex: retired 2026-11-06 | |
 | 102 | Gluetun VPN, qBittorrent, Prowlarr, Radarr, Sonarr, Seerr, DoplarrRS | requests via website or Discord bot |
 | 103 | Omada SDN controller | manages the router, switch and access points |
 | 104 | Prometheus, Grafana, Uptime Kuma, pve-exporter | dashboards and alert rules provisioned from this repo |
@@ -30,7 +30,7 @@ This is a sanitized, read-only mirror of a private repo, published by
 | 112 | Scheduled scripts | small jobs as systemd timers under a non-root user, each alerting to Discord and heartbeating to Uptime Kuma |
 
 Host: Ryzen 9 3900X, 64 GB RAM, NVMe boot pool, three ZFS data pools (media, bulk, an 18 TB backup
-target). Containers 100–104 are privileged (bind mounts, Docker); 105–112 are unprivileged.
+target). Containers 100 and 102–104 are privileged (bind mounts, Docker); 105–112 are unprivileged.
 
 ## Network
 
@@ -39,7 +39,6 @@ flowchart LR
   internet((Internet)) --> er707["Omada ER707-M2<br/>IPS: detect + prevent"]
   er707 -- "443/tcp" --> caddy
   er707 -- "2456-2457/udp" --> valheim
-  er707 -- "32400/tcp" --> plex
 
   subgraph dmz["VLAN 30 · DMZ"]
     caddy["CT 107 Caddy<br/>wildcard TLS · CrowdSec bouncer"]
@@ -50,7 +49,6 @@ flowchart LR
     jellyfin["CT 106 Jellyfin :8096"]
     seerr["CT 102 Seerr :5055"]
     pihole["CT 105 Pi-hole"]
-    plex["CT 101 Plex :32400"]
     other["CTs 100, 103, 104, 108, 110, 112"]
     agent["CT 111 agent<br/>Proxmox firewall: internet only"]
   end
@@ -129,8 +127,7 @@ nightly one, and a provisioning file Grafana can't read takes all of Grafana dow
 - Uptime Kuma watches every service and every backup job. A script on a separate desktop watches
   the host itself, and a hardware watchdog reboots it if the kernel hangs.
 - Internet-facing: router IPS in prevent mode, CrowdSec bouncer inside Caddy, everything public on a
-  DMZ VLAN. The only LAN ports reachable from outside are Jellyfin and Seerr (through the proxy only)
-  and Plex's own port.
+  DMZ VLAN. No LAN port is reachable from outside; Jellyfin and Seerr are reached only through the proxy.
 - Secrets: Ansible Vault in the repo, rendered to `0600` files on the hosts; a gitleaks scan of the
   full history runs in CI and before every publish.
 
@@ -146,3 +143,8 @@ scripts/     publish-public.sh, collect.sh (live-config snapshot with secrets sc
 
 Running it yourself means adapting a lot (IPs, MACs, storage names, bind mounts), but each role is
 small and readable. MIT licensed.
+
+## Incidents
+
+- [2026-11-06: Plex container compromised via Plex2Shell](docs/incidents/2026-11-06-plex-compromise.md):
+  the one service exposed outside the DMZ was the one that got hit. Contained the same day, no root, no lateral movement.
