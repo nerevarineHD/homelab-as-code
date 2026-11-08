@@ -1,0 +1,32 @@
+---
+# NUT on the Proxmox host: the UPS's USB cable plugs in here, so the host is the
+# NUT primary. upsd listens on localhost only for now; open it to the LAN later
+# when the Win10 desktop gets a NUT client.
+
+nut_ups_name: cyberpower
+nut_ups_desc: "CyberPower PR1500LCDRT2U"
+nut_ups_vendorid: "0764"
+nut_ups_productid: "0601"
+
+# Normal path: the host shuts itself down after this many seconds on battery, and the
+# UPS keeps the router, switch and APs running (no killpower). Power blips shorter
+# than this are ignored.
+nut_onbatt_shutdown_delay: 60
+
+# Backstop only, if the timed shutdown above didn't happen: NUT ignores the UPS's own
+# (late) low-battery flag and raises it at whichever of these comes first.
+nut_shutdown_charge: 40        # percent
+nut_shutdown_runtime: 600      # seconds of runtime left
+
+nut_listen:
+  - 127.0.0.1
+
+nut_upsmon_password: "{{ vault_nut_upsmon_password }}"
+
+# Discord webhook for power events (on battery, back on mains, low battery, shutdown).
+# Same channel as the Grafana alerts.
+nut_discord_webhook: "{{ vault_grafana_discord_webhook }}"
+
+# Physical NIC behind vmbr0, for Wake-on-LAN (PVE 9 names it nicN; older installs enpXsY/ethN). After a timed shutdown the UPS never cuts
+# the host's power, so when mains returns the host stays off until it gets a magic packet.
+nut_wol_iface: "{{ ansible_facts['vmbr0']['interfaces'] | select('match', '^(nic|en|eth)') | first }}"

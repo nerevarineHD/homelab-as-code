@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+MONITOR {{ nut_ups_name }}@localhost 1 upsmon {{ nut_upsmon_password }} primary
+MINSUPPLIES 1
+
+# PVE stops guests cleanly as part of a normal host shutdown.
+SHUTDOWNCMD "/sbin/shutdown -h +0"
+POWERDOWNFLAG /etc/killpower
+FINALDELAY 5
+
+NOTIFYCMD /usr/local/sbin/nut-notify
+NOTIFYFLAG ONBATT   SYSLOG+EXEC
+NOTIFYFLAG ONLINE   SYSLOG+EXEC
+NOTIFYFLAG LOWBATT  SYSLOG+EXEC
+NOTIFYFLAG FSD      SYSLOG+EXEC
+NOTIFYFLAG SHUTDOWN SYSLOG+EXEC
+NOTIFYFLAG COMMBAD  SYSLOG+EXEC
+NOTIFYFLAG COMMOK   SYSLOG+EXEC
+NOTIFYFLAG NOCOMM   SYSLOG+EXEC
+NOTIFYFLAG REPLBATT SYSLOG+EXEC

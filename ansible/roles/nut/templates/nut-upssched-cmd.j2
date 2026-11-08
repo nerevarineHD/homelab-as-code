@@ -1,0 +1,14 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Called by upssched (as the nut user) when a timer fires.
+case "$1" in
+  onbatt-shutdown)
+    NOTIFYTYPE=ONBATT-SHUTDOWN UPSNAME={{ nut_ups_name }} /usr/local/sbin/nut-notify \
+      "on battery for {{ nut_onbatt_shutdown_delay }} s, powering the host off. Network stays on the UPS; wake the host with WoL when power is back."
+    # Picked up by nut-onbatt-shutdown.path (root), which powers the host off.
+    : > /run/nut/shutdown-requested
+    ;;
+  *)
+    logger -t nut-upssched "unknown timer: $1"
+    ;;
+esac

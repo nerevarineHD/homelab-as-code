@@ -480,3 +480,169 @@ groups:
           isPaused: false
           notification_settings:
             receiver: Discord
+    # Added after the 2026-11-06 Plex compromise: a miner ran 12 days in CT 101 at 50-100% CPU
+    # and nothing alerted. pve_cpu_usage_ratio is relative to the guest's own cores.
+    - orgId: 1
+      name: guest-anomalies
+      folder: Homelab
+      interval: 1m
+      rules:
+        - uid: guest-cpu-sustained
+          title: 'Guest CPU sustained above 50%'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 900
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: pve_cpu_usage_ratio{id=~"(lxc|qemu)/.+"} * on(id) group_left(name) pve_guest_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0.5
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Error
+          for: 1h
+          annotations:
+            description: 'Sustained high CPU in a guest is what a cryptominer looks like. Inside it: ps aux --sort=-%cpu | head, and look for odd files in /tmp, /var/tmp, /dev/shm.'
+            summary: '{{ $labels.name }} ({{ $labels.id }}) has held over 50% CPU for an hour'
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: guest-egress-sustained
+          title: 'Guest outbound traffic sustained (non-streaming)'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 900
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: rate(pve_network_transmit_bytes{id=~"(lxc|qemu)/.+", id!~"lxc/(102|106|107)"}[10m]) * on(id) group_left(name) pve_guest_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 500000
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Error
+          for: 2h
+          annotations:
+            description: 'This guest has no reason to push steady traffic: possible proxying or exfiltration. Inside it: ss -tunap. (Excludes 102 downloader, which seeds, and 106/107, which stream.)'
+            summary: '{{ $labels.name }} ({{ $labels.id }}) has sent over 500 KB/s for 2 hours'
+          isPaused: false
+          notification_settings:
+            receiver: Discord
+        - uid: streaming-egress-sustained
+          title: 'Streaming guest outbound traffic longer than a movie'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 900
+                to: 0
+              datasourceUid: afzfzrvuet79cd
+              model:
+                editorMode: code
+                expr: rate(pve_network_transmit_bytes{id=~"lxc/(106|107)"}[10m]) * on(id) group_left(name) pve_guest_info
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              queryType: expression
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 500000
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Error
+          for: 4h
+          annotations:
+            description: 'Longer than a movie. Check Jellyfin Dashboard -> Activity for who is watching; if nobody is, look harder.'
+            summary: '{{ $labels.name }} ({{ $labels.id }}) has streamed over 500 KB/s for 4 hours'
+          isPaused: false
+          notification_settings:
+            receiver: Discord

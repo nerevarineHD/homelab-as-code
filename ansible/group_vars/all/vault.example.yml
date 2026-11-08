@@ -8,6 +8,7 @@ vault_grafana_discord_webhook: CHANGE_ME
 vault_kuma_push_backup_replicate: CHANGE_ME
 vault_kuma_push_offsite: CHANGE_ME
 vault_kuma_push_swim_watch: CHANGE_ME
+vault_nut_upsmon_password: CHANGE_ME
 vault_openrouter_general_key: CHANGE_ME
 vault_openrouter_private_key: CHANGE_ME
 vault_openwebui_secret_key: CHANGE_ME

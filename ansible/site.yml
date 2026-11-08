@@ -15,6 +15,7 @@
     - role: nvidia
       vars:
         nvidia_kernel_module: true
+    - nut
 
 - name: Monitoring stack (CT 104)
   hosts: monitoring

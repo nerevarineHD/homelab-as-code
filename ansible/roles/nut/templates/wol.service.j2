@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Enable Wake-on-LAN (magic packet) on {{ nut_wol_iface }}
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ethtool -s {{ nut_wol_iface }} wol g
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 # Postmortem: Plex container (CT 101) cryptominer compromise
 
 **Date of discovery:** 2026-11-06
-**Status:** Contained. CT 101 stopped and isolated; rebuild/retire decision pending.
+**Status:** Closed (2026-11-08). CT 101 retired: stopped, unmanaged, kept on disk as evidence. Hardening follow-ups tracked below.
 **Severity:** Medium. One container was compromised as an unprivileged service user. No root, no lateral movement, no data loss.
 
 ## Summary
@@ -96,13 +96,14 @@ Found during a manual CVE review, not by monitoring. A simple "container CPU > 5
 - [x] Reset Plex password; revoke all sessions
 - [x] Lateral-movement checks
 - [x] Stop managing CT 101 in OpenTofu (`removed` block, `destroy = false`). The provider doesn't read `link_down`, so an apply would have restarted the container with no guarantee its network stayed cut
-- [ ] Decide Plex's fate: retire, or rebuild as an **unprivileged** LXC, LAN-only, Remote Access off, own VLAN
-- [ ] Alert on sustained container CPU (Prometheus/Grafana via pve-exporter)
+- [x] Decide Plex's fate: **retired**. Jellyfin serves family and friends. Any future rebuild is an **unprivileged** LXC, LAN-only, Remote Access off, own VLAN
+- [x] Alert on sustained guest CPU (>50% for 1h), plus sustained outbound traffic (>500 KB/s for 2h, or 4h for the streaming guests), in Grafana via pve-exporter
 - [ ] Remote syslog for Omada gateway + ACL/IDS logging
 - [x] Review ER707 Threat Management for Oct 20 – Nov 6: no exploit or mining signatures fired
 - [x] Check the 7 Tor events. Oct 30: Tor relay ↔ 192.168.0.124 (the admin desktop; a Brave private-with-Tor window, benign). Nov 3 17:58: Tor relay → Caddy on the DMZ (inbound scan, normal). **Nov 3 11:27: Tor relays 192.42.116.15 and 192.42.116.20 ↔ 192.168.0.12**, so at least one actor reached the Plex box through Tor during the compromise.
 - [ ] Enable the remaining IPS categories (likely including mining/policy) and measure the throughput hit
-- [ ] Update the public README: remove the 32400 → Plex path and the "Plex's own port" exception
+- [x] Update the public README: remove the 32400 → Plex path and the "Plex's own port" exception
 - [ ] Disable SSH password auth on the host and all containers (Ansible)
 - [ ] Audit all third-party apt repos for dead or moved sources (`apt update` errors should alert, not scroll by)
-- [ ] Policy: anything internet-facing lives in the DMZ, no exceptions
+- [x] Policy: anything internet-facing lives in the DMZ, no exceptions. The only port forwards left are Caddy (443) and Valheim, both on VLAN 30
+- [x] Patch the host (kernel 7.0.14-28, PVE 9.2.26) and every guest; confirm Pi-hole, Caddy, Seerr, Jellyfin, Samba, Open WebUI, Ollama and the Omada controller are past their 2026 CVE fixes

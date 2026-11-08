@@ -126,6 +126,12 @@ nightly one, and a provisioning file Grafana can't read takes all of Grafana dow
   pool health and capacity, SMART changes, stale collectors and any scrape target down.
 - Uptime Kuma watches every service and every backup job. A script on a separate desktop watches
   the host itself, and a hardware watchdog reboots it if the kernel hangs.
+- Guest anomaly alerts: any container or VM holding over 50% CPU for an hour, or pushing steady
+  outbound traffic for hours, pages Discord. Added after the
+  [2026-11-06 incident](docs/incidents/2026-11-06-plex-compromise.md), where a miner ran unnoticed for 12 days.
+- Power: the whole stack runs on a CyberPower 1500 VA UPS. NUT posts power events to Discord and
+  powers the host off after 60 s on battery; the router, switch and APs stay up on the UPS for hours,
+  and the host comes back with Wake-on-LAN.
 - Internet-facing: router IPS in prevent mode, CrowdSec bouncer inside Caddy, everything public on a
   DMZ VLAN. No LAN port is reachable from outside; Jellyfin and Seerr are reached only through the proxy.
 - Secrets: Ansible Vault in the repo, rendered to `0600` files on the hosts; a gitleaks scan of the

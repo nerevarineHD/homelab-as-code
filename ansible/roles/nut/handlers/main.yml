@@ -1,0 +1,31 @@
+---
+# Order matters: regenerate the driver unit from ups.conf, restart the driver,
+# then the server, then the monitor. Skipped in --check: the units don't exist until
+# the packages are really installed.
+- name: Regenerate NUT driver units
+  ansible.builtin.systemd:
+    name: nut-driver-enumerator
+    state: restarted
+  listen: Restart nut
+  when: not ansible_check_mode
+
+- name: Restart NUT driver
+  ansible.builtin.systemd:
+    name: nut-driver.target
+    state: restarted
+  listen: Restart nut
+  when: not ansible_check_mode
+
+- name: Restart NUT server
+  ansible.builtin.systemd:
+    name: nut-server
+    state: restarted
+  listen: Restart nut
+  when: not ansible_check_mode
+
+- name: Restart NUT monitor
+  ansible.builtin.systemd:
+    name: nut-monitor
+    state: restarted
+  listen: Restart nut
+  when: not ansible_check_mode

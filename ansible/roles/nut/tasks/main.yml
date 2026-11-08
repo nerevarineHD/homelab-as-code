@@ -1,0 +1,143 @@
+---
+- name: Install NUT
+  ansible.builtin.apt:
+    name:
+      - nut-server
+      - nut-client
+      - ethtool
+    state: present
+
+# Debian's NUT udev rule lists this UPS, but on pve the device still came up root:root
+# and the driver failed with "insufficient permissions". Our own rule, matched on the
+# exact USB ID and ordered late, wins. Replay the add event whenever it changes so an
+# already-connected UPS picks it up without a replug.
+- name: Udev rule giving the nut group the UPS
+  ansible.builtin.copy:
+    content: |
+      SUBSYSTEM=="usb", ATTR{idVendor}=="{{ nut_ups_vendorid }}", ATTR{idProduct}=="{{ nut_ups_productid }}", MODE="0660", GROUP="nut"
+    dest: /etc/udev/rules.d/90-nut-{{ nut_ups_name }}.rules
+    owner: root
+    group: root
+    mode: "0644"
+  register: nut_udev_rule
+
+- name: Apply the udev rule to an already-connected UPS
+  ansible.builtin.shell: |
+    udevadm control --reload-rules
+    udevadm trigger --subsystem-match=usb --action=add
+    udevadm settle
+  changed_when: true
+  when: nut_udev_rule is changed and not ansible_check_mode
+  notify: Restart nut
+
+- name: NUT config files
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/nut/{{ item }}"
+    owner: root
+    group: nut
+    mode: "0640"
+  loop:
+    - nut.conf
+    - ups.conf
+    - upsd.conf
+  notify: Restart nut
+
+- name: NUT config files with the upsmon password
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/nut/{{ item }}"
+    owner: root
+    group: nut
+    mode: "0640"
+  loop:
+    - upsd.users
+    - upsmon.conf
+  diff: false
+  notify: Restart nut
+
+- name: Discord webhook for power events
+  ansible.builtin.copy:
+    content: "{{ nut_discord_webhook }}\n"
+    dest: /etc/nut/discord-webhook
+    owner: root
+    group: nut
+    mode: "0640"
+  no_log: true
+
+- name: Power-event notifier (called by upsmon)
+  ansible.builtin.template:
+    src: nut-notify.j2
+    dest: /usr/local/sbin/nut-notify
+    owner: root
+    group: nut
+    mode: "0750"
+
+- name: NUT services enabled and running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - nut-server
+    - nut-monitor
+  # In --check the packages aren't really installed, so the units don't exist yet.
+  when: not ansible_check_mode
+
+# --- Timed shutdown on battery (network stays up) -------------------------------------
+# upsmon -> nut-notify -> upssched starts a timer on ONBATT and cancels it on ONLINE.
+# When it fires, the command script (running as nut) drops a flag file; a root systemd
+# path unit sees it and powers the host off. Plain poweroff, not upsmon FSD, so no
+# killpower: the UPS keeps feeding the network gear.
+- name: Upssched config (on-battery shutdown timer)
+  ansible.builtin.template:
+    src: upssched.conf.j2
+    dest: /etc/nut/upssched.conf
+    owner: root
+    group: nut
+    mode: "0640"
+
+- name: Upssched command script
+  ansible.builtin.template:
+    src: nut-upssched-cmd.j2
+    dest: /usr/local/sbin/nut-upssched-cmd
+    owner: root
+    group: nut
+    mode: "0750"
+
+- name: Root units that power off when the timer fires
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - nut-onbatt-shutdown.path
+    - nut-onbatt-shutdown.service
+  register: nut_shutdown_units
+
+# --- Wake-on-LAN so the host can come back while the UPS is still up -------------------
+- name: Wake-on-LAN unit for the bridge NIC
+  ansible.builtin.template:
+    src: wol.service.j2
+    dest: /etc/systemd/system/wol.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: nut_wol_unit
+
+- name: Reload systemd after unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: nut_shutdown_units is changed or nut_wol_unit is changed
+
+- name: On-battery shutdown watcher and Wake-on-LAN enabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - nut-onbatt-shutdown.path
+    - wol.service
+  when: not ansible_check_mode

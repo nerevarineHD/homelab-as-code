@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Power off after {{ nut_onbatt_shutdown_delay }} s on UPS battery
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/rm -f /run/nut/shutdown-requested
+ExecStart=/usr/bin/systemctl poweroff

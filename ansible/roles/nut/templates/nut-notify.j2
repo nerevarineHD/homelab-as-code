@@ -1,0 +1,20 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Called by upsmon with the event text as $1; NOTIFYTYPE and UPSNAME are in the env.
+# Posts to Discord, falls back to syslog. Never blocks upsmon for long.
+# ONBATT/ONLINE also drive the on-battery shutdown timer. Do this first so it never
+# depends on Discord being reachable.
+case "${NOTIFYTYPE:-}" in
+  ONBATT|ONLINE) /usr/sbin/upssched "$1" >/dev/null 2>&1 || logger -t nut-notify "upssched failed" ;;
+esac
+
+msg="⚡ $(hostname): ${NOTIFYTYPE:-EVENT} on ${UPSNAME:-ups}: $1"
+logger -t nut-notify "$msg"
+
+hook=$(cat /etc/nut/discord-webhook 2>/dev/null) || exit 0
+[ -n "$hook" ] || exit 0
+
+payload=$(python3 -c 'import json, sys; print(json.dumps({"content": sys.argv[1]}))' "$msg")
+curl -fsS -m 10 -H 'Content-Type: application/json' -d "$payload" "$hook" >/dev/null 2>&1 \
+  || logger -t nut-notify "discord post failed"
+exit 0

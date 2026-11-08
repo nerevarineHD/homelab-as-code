@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+CMDSCRIPT /usr/local/sbin/nut-upssched-cmd
+PIPEFN /run/nut/upssched.pipe
+LOCKFN /run/nut/upssched.lock
+
+AT ONBATT * START-TIMER onbatt-shutdown {{ nut_onbatt_shutdown_delay }}
+AT ONLINE * CANCEL-TIMER onbatt-shutdown
