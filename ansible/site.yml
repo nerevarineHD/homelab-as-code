@@ -85,3 +85,14 @@
   hosts: scripts
   roles:
     - scripts
+
+- name: Lab wiki (CT 115, LAN only)
+  hosts: wiki
+  roles:
+    - wiki
+
+- name: Dedicated Codex VM (114)
+  hosts: codex
+  roles:
+    - common
+    - codex

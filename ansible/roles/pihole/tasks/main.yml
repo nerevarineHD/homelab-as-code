@@ -110,17 +110,23 @@
   changed_when: true   # only runs when needed (when:/handler)
 
 # Split-horizon DNS: at home, every *.example.net name resolves straight to Caddy on CT 107 (DMZ).
+# wiki.lan is LAN-only (CT 115) and has no public name at all.
 - name: Read Pi-hole extra dnsmasq lines
   ansible.builtin.command: pihole-FTL --config misc.dnsmasq_lines
   register: pihole_ftl_dnsmasq_lines
   changed_when: false
   check_mode: false
 
-- name: "*.example.net -> CT 107 (Caddy)"
-  ansible.builtin.command: >
-    pihole-FTL --config misc.dnsmasq_lines '["address=/example.net/192.168.30.10","address=/valheim.example.net/192.168.30.11"]'
+- name: "*.example.net -> CT 107 (Caddy), wiki.lan -> CT 115"
+  ansible.builtin.command:
+    argv: [pihole-FTL, --config, misc.dnsmasq_lines, "{{ pihole_dnsmasq_lines | to_json }}"]
+  vars:
+    pihole_dnsmasq_lines:
+      - address=/example.net/192.168.30.10
+      - address=/valheim.example.net/192.168.30.11
+      - address=/wiki.lan/192.168.0.28
   notify: Restart pihole-FTL
-  when: "'address=/valheim.example.net/192.168.30.11' not in pihole_ftl_dnsmasq_lines.stdout"
+  when: "'address=/wiki.lan/192.168.0.28' not in pihole_ftl_dnsmasq_lines.stdout"
   changed_when: true   # only runs when needed (when:/handler)
 
 # Default 1000 queries/60s per client is too tight for chatty-but-legit devices

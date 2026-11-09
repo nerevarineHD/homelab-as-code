@@ -1,0 +1,37 @@
+---
+# Deliberately scoped to the known CT111 trial paths, never a parameterized home.
+- name: Verify cleanup is restricted to the original agent container
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'agent'
+      - ct_id | int == 111
+      - agent_user == 'claude'
+      - agent_home == '/home/claude'
+
+- name: Check for unexpected Codex login state before cleanup
+  ansible.builtin.stat:
+    path: /home/claude/.codex/auth.json
+  register: agent_codex_auth
+
+- name: Refuse to discard unexpected authentication state
+  ansible.builtin.assert:
+    that:
+      - not agent_codex_auth.stat.exists
+    fail_msg: Unexpected Codex auth.json exists; review and revoke credentials before cleanup.
+
+- name: Remove only the Codex trial installation and state
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/codex
+    - /opt/codex
+    - /var/cache/codex
+    - /etc/codex
+    - /home/claude/.codex
+
+- name: Remove bubblewrap added for the Codex trial
+  ansible.builtin.apt:
+    name: bubblewrap
+    state: absent
+    autoremove: false

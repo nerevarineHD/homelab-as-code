@@ -1,0 +1,19 @@
+---
+# CT 115: the lab wiki. A timer pulls the homelab repo, runs scripts/wiki-build.sh (which pulls each
+# project repo), and publishes site/ to nginx. LAN only: nginx allows the LAN and nothing else.
+wiki_user: wiki
+wiki_home: /var/lib/wiki
+wiki_venv: /opt/wiki/venv
+wiki_webroot: /var/www/wiki
+wiki_listen_allow: 192.168.0.0/24
+
+# Each repo needs its own READ-ONLY deploy key (GitHub won't reuse a key across repos). The keys
+# are made inside the CT; the play prints any public half GitHub doesn't accept yet.
+wiki_repos:
+  - name: homelab
+    url: git@github.com:<you>/homelab.git
+  - name: own-your-glass
+    url: git@github.com:nerevarineHD/own-your-glass.git
+
+wiki_schedule: "*:0/15"   # every 15 minutes; the build is skipped when no repo changed
+wiki_kuma_push_url: "{{ 'http://192.168.0.15:3001/api/push/' ~ kuma_push_wiki if kuma_push_wiki else '' }}"

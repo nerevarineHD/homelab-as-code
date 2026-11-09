@@ -1,0 +1,7 @@
+# Managed by Ansible. Public research and project edits; no full-access mode.
+allowed_sandbox_modes = ["read-only", "workspace-write"]
+allowed_approval_policies = ["on-request"]
+allowed_web_search_modes = ["disabled", "cached", "live"]
+
+# External MCP tools remain disabled.
+[mcp_servers]

@@ -1,0 +1,178 @@
+---
+# CT 115: lab wiki. Repos -> scripts/wiki-build.sh -> nginx, LAN only.
+# Logs: journalctl -u wiki-update. Force a rebuild: rm /var/lib/wiki/last-build, then
+# systemctl start wiki-update.
+- name: Packages
+  ansible.builtin.apt:
+    # python3-packaging: Ansible's pip module needs it on the target, and the CT template lacks it
+    name: [git, python3, python3-venv, python3-packaging, nginx, rsync, zip, curl, ca-certificates]
+    state: present
+    update_cache: true  # a fresh CT's package lists predate security updates (404s otherwise)
+    cache_valid_time: 3600
+
+- name: Wiki user (system account, no password)
+  ansible.builtin.user:
+    name: "{{ wiki_user }}"
+    system: true
+    shell: /bin/bash  # Ansible becomes it with su, which needs a real shell; no password, so no login
+    home: "{{ wiki_home }}"
+    create_home: true
+
+- name: Directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ wiki_user }}"
+    group: "{{ wiki_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ wiki_home }}/.ssh", mode: "0700" }
+    - { path: "{{ wiki_home }}/cache", mode: "0755" }
+    - { path: "{{ wiki_webroot }}", mode: "0755" }
+    - { path: /opt/wiki, mode: "0755" }
+
+- name: Deploy keys, one per repo (made here, the private half never leaves the CT)
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N "" -C "wiki-ct115-{{ item.name }}-readonly" -f {{ wiki_home }}/.ssh/{{ item.name }}
+    creates: "{{ wiki_home }}/.ssh/{{ item.name }}"
+  become: true
+  become_user: "{{ wiki_user }}"
+  become_method: ansible.builtin.su  # Debian CT templates ship without sudo
+  loop: "{{ wiki_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: SSH config (a host alias per repo)
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ wiki_home }}/.ssh/config"
+    owner: "{{ wiki_user }}"
+    group: "{{ wiki_user }}"
+    mode: "0600"
+
+- name: GitHub host key
+  ansible.builtin.known_hosts:
+    path: "{{ wiki_home }}/.ssh/known_hosts"
+    name: github.com  # the per-repo aliases resolve to github.com, which is what ssh checks
+    key: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+  become: true
+  become_user: "{{ wiki_user }}"
+  become_method: ansible.builtin.su  # Debian CT templates ship without sudo
+
+- name: Read the deploy keys' public halves
+  ansible.builtin.slurp:
+    src: "{{ wiki_home }}/.ssh/{{ item.name }}.pub"
+  register: wiki_pubkeys
+  loop: "{{ wiki_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+  check_mode: false
+
+- name: Can each deploy key read its repo yet?
+  ansible.builtin.command:  # noqa: command-instead-of-module (ls-remote only checks access; the git module can't)
+    cmd: git ls-remote --heads git@github-{{ item.name }}:{{ item.url.split(':', 1)[1] }}
+  become: true
+  become_user: "{{ wiki_user }}"
+  become_method: ansible.builtin.su  # Debian CT templates ship without sudo
+  register: wiki_repo_access
+  loop: "{{ wiki_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Deploy key not added yet - add it as a READ-ONLY deploy key, then re-run
+  ansible.builtin.debug:
+    msg:
+      - "GitHub -> nerevarineHD/{{ item.0.name }} -> Settings -> Deploy keys -> Add deploy key"
+      - "Title: wiki-ct115-readonly   Allow write access: OFF"
+      - "{{ item.1.content | b64decode | trim }}"
+  loop: "{{ wiki_repos | zip(wiki_pubkeys.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when: (wiki_repo_access.results | selectattr('item.name', 'equalto', item.0.name) | first).rc != 0
+
+- name: Clone the repos (read-only keys; the timer pulls updates)
+  ansible.builtin.git:
+    repo: "git@github-{{ item.name }}:{{ item.url.split(':', 1)[1] }}"
+    dest: "{{ wiki_home }}/{{ 'homelab' if item.name == 'homelab' else 'cache/' ~ item.name }}"
+    version: main
+    update: false
+  become: true
+  become_user: "{{ wiki_user }}"
+  become_method: ansible.builtin.su  # Debian CT templates ship without sudo
+  loop: "{{ wiki_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (wiki_repo_access.results | selectattr('item.name', 'equalto', item.name) | first).rc == 0
+
+- name: Is the homelab repo cloned?
+  ansible.builtin.stat:
+    path: "{{ wiki_home }}/homelab/requirements-docs.txt"
+  register: wiki_requirements
+
+- name: MkDocs in a venv, pinned by the repo's requirements-docs.txt
+  ansible.builtin.pip:
+    requirements: "{{ wiki_home }}/homelab/requirements-docs.txt"
+    virtualenv: "{{ wiki_venv }}"
+    virtualenv_command: python3 -m venv
+  when: wiki_requirements.stat.exists
+
+- name: Update script
+  ansible.builtin.template:
+    src: wiki-update.sh.j2
+    dest: /usr/local/bin/wiki-update
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Systemd units
+  ansible.builtin.template:
+    src: "wiki-update.{{ item }}.j2"
+    dest: "/etc/systemd/system/wiki-update.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  notify: Reload systemd
+
+- name: Nginx site (LAN only)
+  ansible.builtin.template:
+    src: nginx-wiki.conf.j2
+    dest: /etc/nginx/sites-available/wiki
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable the wiki site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/wiki
+    src: /etc/nginx/sites-available/wiki
+    state: link
+    owner: root
+    group: root
+  notify: Reload nginx
+
+- name: Drop nginx's default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Flush handlers before starting the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Nginx running
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Rebuild timer
+  ansible.builtin.systemd_service:
+    name: wiki-update.timer
+    state: started
+    enabled: true
+  when: wiki_requirements.stat.exists

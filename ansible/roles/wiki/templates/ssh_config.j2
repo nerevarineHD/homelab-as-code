@@ -1,0 +1,9 @@
+# Managed by Ansible (roles/wiki). One host alias per repo so each uses its own deploy key.
+{% for r in wiki_repos %}
+Host github-{{ r.name }}
+  HostName github.com
+  User git
+  IdentityFile {{ wiki_home }}/.ssh/{{ r.name }}
+  IdentitiesOnly yes
+
+{% endfor %}

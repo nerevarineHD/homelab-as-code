@@ -28,9 +28,12 @@ This is a sanitized, read-only mirror of a private repo, published by
 | 110 | Ollama + Open WebUI | local models on the GPU, cloud models via OpenRouter (separate ZDR-only key for private chats) |
 | 111 | Claude Code agent sandbox | read-only clone of this repo; Proxmox firewall blocks every private range, managed settings + a guard hook block apply/push/secrets |
 | 112 | Scheduled scripts | small jobs as systemd timers under a non-root user, each alerting to Discord and heartbeating to Uptime Kuma |
+| VM 113 | Home Assistant OS | the only appliance VM; one NIC on the LAN, one on the IoT VLAN with no gateway |
+| VM 114 | Codex sandbox VM | non-sudo user, Codex CLI in its own sandbox; Proxmox firewall default-drop, public egress only, read-only copy of the lab docs |
+| 115 | Lab wiki | rebuilds the docs every 15 min with MkDocs, nginx for the LAN only (never behind Caddy) |
 
 Host: Ryzen 9 3900X, 64 GB RAM, NVMe boot pool, three ZFS data pools (media, bulk, an 18 TB backup
-target). Containers 100 and 102–104 are privileged (bind mounts, Docker); 105–112 are unprivileged.
+target). Containers 100 and 102–104 are privileged (bind mounts, Docker); 105–112 and 115 are unprivileged.
 
 ## Network
 
@@ -140,12 +143,18 @@ nightly one, and a provisioning file Grafana can't read takes all of Grafana dow
 ## Layout
 
 ```
-tofu/        OpenTofu: containers, GPU passthrough, Cloudflare DNS
-ansible/     inventory, site.yml, 19 roles, group_vars (vault.example.yml here)
+tofu/        OpenTofu: containers, VMs, GPU passthrough, firewall rules, Cloudflare DNS
+ansible/     inventory, site.yml, 22 roles, group_vars (vault.example.yml here)
 scripts/     publish-public.sh, collect.sh (live-config snapshot with secrets scrubbed),
              tofu-env.sh, media-library maintenance scripts
-.github/     CI
+.github/     CI, including docs-check (below)
 ```
+
+Documentation lives next to the code in the private repo and is rebuilt into a LAN-only wiki
+(CT 115); it holds the network map, so it isn't published here. Every agent and human follows
+the same rules: docs change in the same PR as the code, and CI fails any PR that touches
+`tofu/`, `ansible/`, `scripts/` or `.github/` without adding a changelog entry. In this mirror
+that check skips itself, since `docs/` isn't published.
 
 Running it yourself means adapting a lot (IPs, MACs, storage names, bind mounts), but each role is
 small and readable. MIT licensed.

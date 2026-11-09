@@ -12,3 +12,11 @@ tofu/.terraform/
 tofu/*.tfstate
 tofu/*.tfstate.*
 __pycache__/
+# Wiki build output and project docs pulled in by scripts/wiki-build.sh
+site/
+wiki-export/
+docs/projects/
+.wiki-cache/
+# Local OpenTofu inputs and saved plans (plans can hold variable values, including secrets)
+*.tfvars
+*.plan

@@ -1,0 +1,33 @@
+#!/bin/bash
+# Managed by Ansible (roles/wiki). Pull the repos; rebuild and publish only when something changed.
+# A failed build leaves the last good site up and skips the Kuma heartbeat, so Kuma alerts.
+set -euo pipefail
+
+HOME={{ wiki_home }}
+REPO=$HOME/homelab
+CACHE=$HOME/cache
+STAMP=$HOME/last-build
+export PATH={{ wiki_venv }}/bin:$PATH WIKI_CACHE=$CACHE
+{% for r in wiki_repos if r.name != 'homelab' %}
+export {{ r.name | upper | replace('-', '_') }}_URL=git@github-{{ r.name }}:{{ r.url.split(':', 1)[1] }}
+{% endfor %}
+
+git -C "$REPO" pull -q --ff-only
+for d in "$CACHE"/*/; do [ -d "$d/.git" ] && git -C "$d" pull -q --ff-only; done
+
+heads=$(git -C "$REPO" rev-parse HEAD; for d in "$CACHE"/*/; do [ -d "$d/.git" ] && git -C "$d" rev-parse HEAD; done)
+if [ "$heads" != "$(cat "$STAMP" 2>/dev/null)" ] || [ ! -f {{ wiki_webroot }}/index.html ]; then
+  if ! "$REPO/scripts/wiki-build.sh" --no-pull > "$HOME/build.log" 2>&1; then
+    tail -n 40 "$HOME/build.log" >&2
+    echo "build failed; keeping the last good site" >&2
+    exit 1
+  fi
+  rsync -a --delete --exclude=wiki-export.zip "$REPO/site/" {{ wiki_webroot }}/
+  (cd "$REPO" && rm -f "$HOME/wiki-export.zip" && zip -qr "$HOME/wiki-export.zip" wiki-export)
+  mv "$HOME/wiki-export.zip" {{ wiki_webroot }}/wiki-export.zip
+  echo "$heads" > "$STAMP"
+  echo "published $(git -C "$REPO" rev-parse --short HEAD)"
+fi
+{% if wiki_kuma_push_url %}
+curl -fsS -m 10 -o /dev/null "{{ wiki_kuma_push_url }}?status=up&msg=OK" || true
+{% endif %}

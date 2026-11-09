@@ -129,3 +129,6 @@
   become_user: "{{ agent_user }}"
   become_method: ansible.builtin.su  # sudo is removed on purpose; root can su to the agent user
   when: agent_repo_access.rc == 0
+
+- name: Retire the unsuccessful Codex LXC installation
+  ansible.builtin.import_tasks: retire-codex.yml

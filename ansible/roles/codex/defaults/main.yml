@@ -1,0 +1,14 @@
+---
+codex_user: codex
+codex_home: /home/codex
+codex_version: "0.167.0"
+codex_sha256: "3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e"
+
+# Read-only copy of the homelab docs for Codex (Nov 9, 2026). Root owns the deploy key and the
+# checkout; the codex user can read the files but not the key, and can't change them. A sparse,
+# blobless clone fetches docs/ and the top-level files only. Git uses ssh.github.com:443 because
+# VM 114's firewall allows public 443 but not 22.
+codex_docs_dir: /srv/homelab-docs
+codex_docs_repo: "git@github-homelab-docs:<you>/homelab.git"
+codex_docs_key: /root/.ssh/homelab-docs
+codex_docs_schedule: "*:0/15"

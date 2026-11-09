@@ -1,0 +1,70 @@
+name: docs-check
+
+# Fails a PR that changes infrastructure or CI (tofu/, ansible/, scripts/, .github/) without adding
+# a changelog entry (a new file in docs/changelog/entries/). AGENTS.md rules 1 and 2. Whether the
+# right topic page changed too is still review. Escape hatches for real no-op changes:
+#   - the `no-docs` label (say why in the PR description)
+#   - Renovate PRs (author renovate[bot] or label `renovate`), which only bump pinned versions
+# Re-runs when labels change, so adding `no-docs` turns the check green without a new push.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-updated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Infra changes come with docs changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # The public copy (homelab-as-code) ships no docs/, so there is nothing to check there.
+          if [ ! -d docs/homelab ]; then echo "no wiki in this repo; skipping"; exit 0; fi
+
+          if [ "$AUTHOR" = "renovate[bot]" ]; then echo "Renovate version bump; skipping"; exit 0; fi
+          if printf '%s' "$LABELS" | jq -e 'index("no-docs") or index("renovate")' > /dev/null; then
+            echo "Skipped by label: $LABELS"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA"...HEAD)
+          infra=$(printf '%s\n' "$changed" | grep -E '^(tofu|ansible|scripts|\.github)/' || true)
+          entries=$(git diff --name-only --diff-filter=A "$BASE_SHA"...HEAD -- docs/changelog/entries/ | grep -E '\.md$' || true)
+          pages=$(printf '%s\n' "$changed" | grep -E '^docs/' | grep -v '^docs/changelog/' || true)
+
+          if [ -z "$infra" ]; then echo "No infra or CI changes; nothing to check."; exit 0; fi
+          if [ -n "$entries" ]; then
+            echo "Infra/CI changes come with a changelog entry:"
+            printf '  %s\n' $entries
+            if [ -z "$pages" ]; then
+              echo "::notice title=No docs pages changed::Only a changelog entry. Fine for fixes that change nothing a page describes; otherwise update the page too."
+            fi
+            exit 0
+          fi
+
+          echo "::error title=Changelog entry missing::This PR changes infrastructure or CI but adds no file in docs/changelog/entries/ (AGENTS.md, documentation rules 1 and 2)."
+          echo "Changed infra/CI files:"
+          printf '  %s\n' $infra
+          cat <<'EOF'
+
+          Expected in the same PR:
+            - a NEW changelog entry: docs/changelog/entries/YYYY-MM-DD-short-slug.md
+              (front matter: date, area; then one paragraph: what changed and why)
+            - the docs/homelab/ page(s) describing what changed, if any do: Overview table for guests
+              and IPs, Network/Security for VLANs, firewall and DNS, Infrastructure as Code for tofu
+              files, roles and CI, Monitoring for alerts, Power, Games, Media Stack...
+
+          Editing an existing entry doesn't count. If this change really is a no-op for the lab,
+          add the `no-docs` label and say why in the PR description.
+          EOF
+          exit 1

@@ -1,0 +1,276 @@
+---
+- name: Validate Codex release and platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['system'] == 'Linux'
+      - ansible_facts['architecture'] == 'x86_64'
+      - codex_version is match('^[0-9]+[.][0-9]+[.][0-9]+$')
+      - codex_sha256 is match('^[a-f0-9]{64}$')
+    fail_msg: Codex requires the reviewed Linux x86_64 release and SHA-256 pin.
+
+- name: Codex VM packages
+  ansible.builtin.apt:
+    name: [git, curl, ca-certificates, python3, ripgrep, less, tmux, acl, qemu-guest-agent]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Dedicated Codex user without supplementary groups
+  ansible.builtin.user:
+    name: "{{ codex_user }}"
+    home: "{{ codex_home }}"
+    shell: /bin/bash
+    create_home: true
+    groups: []
+    append: false
+
+# Root SSH-key access is already established by this root-run play.
+# Debian otherwise refuses sudo removal when root's password is locked.
+- name: Remove sudo from the dedicated VM
+  ansible.builtin.apt:
+    name: sudo
+    state: absent
+  environment:
+    SUDO_FORCE_REMOVE: "yes"
+
+- name: Check for the QEMU guest agent channel
+  ansible.builtin.stat:
+    path: /dev/virtio-ports/org.qemu.guest_agent.0
+  register: codex_qemu_agent_channel
+
+- name: QEMU guest agent
+  ansible.builtin.service:
+    name: qemu-guest-agent
+    state: started
+  when:
+    - not ansible_check_mode
+    - codex_qemu_agent_channel.stat.exists
+
+- name: Codex Linux sandbox dependency
+  ansible.builtin.apt:
+    name: bubblewrap
+    state: present
+
+- name: Codex installation directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /var/cache/codex
+    - /opt/codex
+    - "/opt/codex/{{ codex_version }}/package"
+    - /etc/codex
+
+- name: Download pinned Codex release with checksum verification
+  ansible.builtin.get_url:
+    url: "https://github.com/openai/codex/releases/download/rust-v{{ codex_version }}/codex-package-x86_64-unknown-linux-musl.tar.gz"
+    dest: "/var/cache/codex/codex-package-{{ codex_version }}.tar.gz"
+    checksum: "sha256:{{ codex_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Extract the complete pinned Codex package
+  ansible.builtin.unarchive:
+    src: "/var/cache/codex/codex-package-{{ codex_version }}.tar.gz"
+    dest: "/opt/codex/{{ codex_version }}/package"
+    remote_src: true
+    owner: root
+    group: root
+    creates: "/opt/codex/{{ codex_version }}/package/.homelab-complete"
+    mode: "0755"
+  when: not ansible_check_mode
+
+- name: Check required packaged runtime files
+  ansible.builtin.stat:
+    path: "/opt/codex/{{ codex_version }}/package/{{ item }}"
+  loop:
+    - codex-package.json
+    - bin/codex
+    - bin/codex-code-mode-host
+    - bin/codex-exec-server
+    - codex-path/rg
+    - codex-resources/bwrap
+  register: codex_package_files
+  when: not ansible_check_mode
+
+- name: Refuse to select an incomplete Codex package
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.size > 0
+    fail_msg: Required Codex package file is missing or empty.
+  loop: "{{ codex_package_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Record verified package extraction
+  ansible.builtin.copy:
+    content: "{{ codex_sha256 }}\n"
+    dest: "/opt/codex/{{ codex_version }}/package/.homelab-complete"
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Select pinned Codex binary
+  ansible.builtin.file:
+    src: "/opt/codex/{{ codex_version }}/package/bin/codex"
+    dest: /usr/local/bin/codex
+    state: link
+    owner: root
+    group: root
+  when: not ansible_check_mode
+
+- name: Remove the superseded single-binary installation
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/opt/codex/{{ codex_version }}/codex-x86_64-unknown-linux-musl"
+    - "/var/cache/codex/codex-{{ codex_version }}.tar.gz"
+  when: not ansible_check_mode
+
+- name: Codex state directory for the unprivileged Codex user
+  ansible.builtin.file:
+    path: "{{ codex_home }}/.codex"
+    state: directory
+    owner: "{{ codex_user }}"
+    group: "{{ codex_user }}"
+    mode: "0700"
+  when: not ansible_check_mode
+
+- name: Codex independent defaults
+  ansible.builtin.template:
+    src: codex-config.toml.j2
+    dest: "{{ codex_home }}/.codex/config.toml"
+    owner: root
+    group: "{{ codex_user }}"
+    mode: "0640"
+  when: not ansible_check_mode
+
+- name: Codex administrator requirements
+  ansible.builtin.copy:
+    src: codex-requirements.toml
+    dest: /etc/codex/requirements.toml
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+# Read-only homelab docs for Codex at {{ codex_docs_dir }}/docs. Root-owned key and checkout:
+# Codex runs as the codex user, which can read the docs but not the key, and can't edit either.
+- name: Homelab docs deploy key (root only; made here, the private half never leaves the VM)
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N "" -C "codex-vm114-homelab-docs-readonly" -f {{ codex_docs_key }}
+    creates: "{{ codex_docs_key }}"
+  when: not ansible_check_mode
+
+- name: SSH alias for the docs key (GitHub's SSH on 443; VM 114 may not use 22)
+  ansible.builtin.blockinfile:
+    path: /root/.ssh/config
+    create: true
+    owner: root
+    group: root
+    mode: "0600"
+    marker: "# {mark} homelab docs (roles/codex)"
+    block: |
+      Host github-homelab-docs
+        HostName ssh.github.com
+        Port 443
+        User git
+        IdentityFile {{ codex_docs_key }}
+        IdentitiesOnly yes
+
+- name: GitHub's host key for ssh.github.com:443 (same key as github.com)
+  ansible.builtin.known_hosts:
+    path: /root/.ssh/known_hosts
+    name: "[ssh.github.com]:443"
+    key: "[ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+- name: Can the docs key read the homelab repo yet?
+  ansible.builtin.command:  # noqa: command-instead-of-module (ls-remote only checks access)
+    cmd: git ls-remote --heads {{ codex_docs_repo }}
+  register: codex_docs_access
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Read the docs key's public half
+  ansible.builtin.slurp:
+    src: "{{ codex_docs_key }}.pub"
+  register: codex_docs_pubkey
+  when:
+    - not ansible_check_mode
+    - codex_docs_access.rc != 0
+
+- name: Docs key not added yet - add it to homelab as a READ-ONLY deploy key, then re-run
+  ansible.builtin.debug:
+    msg:
+      - "GitHub -> nerevarineHD/homelab -> Settings -> Deploy keys -> Add deploy key"
+      - "Title: codex-vm114-docs-readonly   Allow write access: OFF"
+      - "{{ codex_docs_pubkey.content | b64decode | trim }}"
+  when:
+    - not ansible_check_mode
+    - codex_docs_access.rc != 0
+
+- name: Sparse, blobless clone of docs/ (root-owned, world-readable)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      git clone -q --filter=blob:none --no-checkout {{ codex_docs_repo }} {{ codex_docs_dir }}
+      git -C {{ codex_docs_dir }} sparse-checkout set --cone docs
+      git -C {{ codex_docs_dir }} checkout -q main
+    executable: /bin/bash
+    creates: "{{ codex_docs_dir }}/.git"
+  when:
+    - not ansible_check_mode
+    - codex_docs_access.rc == 0
+
+- name: Docs refresh service and timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/homelab-docs.{{ item.unit }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - unit: service
+      content: |
+        [Unit]
+        Description=Refresh the read-only homelab docs for Codex
+        After=network-online.target
+        Wants=network-online.target
+        ConditionPathExists={{ codex_docs_dir }}/.git
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/git -C {{ codex_docs_dir }} pull -q --ff-only
+    - unit: timer
+      content: |
+        [Unit]
+        Description=Refresh the homelab docs for Codex
+
+        [Timer]
+        OnCalendar={{ codex_docs_schedule }}
+        OnBootSec=1min
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.unit }}"
+
+- name: Docs refresh timer running (reloads systemd first, so new or changed units are seen)
+  ansible.builtin.systemd_service:
+    name: homelab-docs.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: not ansible_check_mode

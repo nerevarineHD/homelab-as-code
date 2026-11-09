@@ -1,0 +1,10 @@
+[Unit]
+Description=Pull the lab wiki's repos, rebuild and publish if anything changed
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ wiki_user }}
+ExecStart=/usr/local/bin/wiki-update
+TimeoutStartSec=600

@@ -1,0 +1,14 @@
+# Managed by Ansible (roles/wiki). LAN only; never proxy this through Caddy.
+server {
+    listen 80 default_server;
+    server_name wiki.lan {{ ansible_host }};
+    root {{ wiki_webroot }};
+    index index.html;
+
+    allow {{ wiki_listen_allow }};
+    deny all;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

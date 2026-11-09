@@ -47,7 +47,9 @@ SHA=$(git rev-parse --short HEAD)
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 say "Staging allowlist from $PRIVATE @ $SHA"
 rsync -a "${EXCLUDE[@]}" "${ALLOW[@]}" "$STAGE/"
-cp -a public/. "$STAGE/"                        # public README, LICENSE, docs
+cp -a public/. "$STAGE/"                        # public README and LICENSE
+# Incident write-ups come from docs/ (the single source); the rest of docs/ stays private.
+mkdir -p "$STAGE/docs" && cp -a docs/incidents "$STAGE/docs/"
 
 say "Vault -> vault.example.yml (key names only, values never leave the vault)"
 (cd "$PRIVATE/ansible" && ansible-vault view "$VAULT") | python3 -c '
@@ -61,7 +63,8 @@ grep -c ': CHANGE_ME' "$STAGE/ansible/group_vars/all/vault.example.yml" | sed 's
 say "Scrubbing domains and zone IDs"
 grep -rlIZ . "$STAGE" | xargs -0 sed -i -E "$SCRUB"
 sed -i -E 's/"[0-9a-f]{32}"/"00000000000000000000000000000000"/' "$STAGE/tofu/cloudflare-dns.tf"
-sed -i -E 's#nerevarineHD/homelab\.git#<you>/homelab.git#' "$STAGE/scripts/collect.sh" "$STAGE/ansible/roles/agent/defaults/main.yml"
+# The private repo's name, wherever a role or script clones it (agent, codex, wiki, collect.sh).
+grep -rlIZ 'nerevarineHD/homelab\.git' "$STAGE" | xargs -0 -r sed -i -E 's#nerevarineHD/homelab\.git#<you>/homelab.git#g'
 tofu fmt -recursive "$STAGE/tofu" >/dev/null     # renamed keys change HCL alignment
 
 say "Checking for anything that must not be public"
